@@ -50,8 +50,12 @@ struct edge {
 		my_n->next = next;
 		my_i->previous = inverse->previous;
 
-		next->previous = my_n;
-		inverse->previous->next = my_i;
+		if (next != nullptr) {
+			next->previous = my_n;
+		}
+		if (inverse->previous != nullptr) {
+			inverse->previous->next = my_i;
+		}
 
 		my_n->previous = this;
 		my_i->next = inverse;
@@ -87,13 +91,22 @@ struct face {
 
 		return result;
 	}
-	bool isBaseEdge(edge* test) {
-		for (auto compare : base_edges) {
-			if (test == compare) {
-				return true;
-			}
+
+	void resolveBasis() {
+		int index = 0;
+		while (index < base_edges.Num()) {
+			auto focus = base_edges[index]->next;
+			do {
+				for (auto &compare : base_edges) {
+					if (compare == focus && compare != base_edges[index]) {
+						base_edges.Remove(focus);
+						break;
+					}
+				}
+				focus = focus->next;
+			} while (focus != base_edges[index]);
+			index++;
 		}
-		return false;
 	}
 };
 
@@ -126,6 +139,12 @@ bool isPointInterior(const FVector2D &test_point, const TArray<FVector2D> &regio
 
 		//if the edge is parrallel to the x-axis, skip
 		if (region[ii].Y == region[next].Y) {
+			if (test_point.Y == region[ii].Y) {
+				if ((region[ii].X <= test_point.X && test_point.X <= region[next].X) || 
+					(region[ii].X >= test_point.X && test_point.X >= region[next].X) ){
+					return true;
+				}
+			}
 			continue;
 		}
 
@@ -161,6 +180,12 @@ bool isPointInterior(const FVector2D &test_point, const face &region) {
 
 
 			if (start_vector.Y == end_vector.Y) {
+				if (test_point.Y == start_vector.Y) {
+					if ((start_vector.X <= test_point.X && test_point.X <= end_vector.X) ||
+						(start_vector.X >= test_point.X && test_point.X >= end_vector.X)) {
+						return true;
+					}
+				}
 				focus = focus->next;
 				continue;
 			}
@@ -205,6 +230,12 @@ bool isPointStrictlyInterior(const FVector2D &test_point, const face &region) {
 
 
 			if (start_vector.Y == end_vector.Y) {
+				if (test_point.Y == start_vector.Y) {
+					if ((start_vector.X <= test_point.X && test_point.X <= end_vector.X) ||
+						(start_vector.X >= test_point.X && test_point.X >= end_vector.X)) {
+						return false;
+					}
+				}
 				focus = focus->next;
 				continue;
 			}
@@ -243,7 +274,7 @@ float intersectRatio(const FVector2D &A_S, const FVector2D &A_E, const FVector2D
 
 	denom = (B_E.Y - B_S.Y)*(A_E.X - A_S.X) - (B_E.X - B_S.X)*(A_E.Y - A_S.Y);
 	if (denom == 0) {
-		return false;
+		return -1.f;
 	}
 
 	ua = ((B_E.X - B_S.X)*(A_S.Y - B_S.Y) - (B_E.Y - B_S.Y)*(A_S.X - B_S.X)) / denom;
@@ -254,6 +285,22 @@ float intersectRatio(const FVector2D &A_S, const FVector2D &A_E, const FVector2D
 	}
 
 	return -1.f;
+}
+
+bool isOnSegment(const FVector2D &test, const FVector2D &a, const FVector2D &b) {
+	if (test.Equals(a)) {
+		return true;
+	}
+
+	FVector2D A = test - a;
+	FVector2D B = b - a;
+
+	if (A.Size() < B.Size()) {
+		A.Normalize();
+		B.Normalize();
+		return FVector2D::DotProduct(A, B) > .997;
+	}
+	return false;
 }
 
 struct RegionIntersectData {
@@ -332,6 +379,46 @@ edge* vertexBufferToRegion(const TArray<FVector2D> &buffer, face *interior, face
 	return points[0]->base_edge->inverse;
 }
 
+float CW_Rotation(edge* a, edge* b) {
+	FVector2D A = a->end_position() - a->start_position();
+	FVector2D B = b->end_position() - b->start_position();
+	A.Normalize();
+	B.Normalize();
+	float difference = FMath::Atan2(A.X*B.Y - A.Y*B.X, A.X*B.X + A.Y*B.Y);
+
+	if (difference < 0) {
+		return PI * 2 - difference;
+	}
+	return difference;
+}
+
+edge* FindEdgeWithBase(face &target, const FVector2D &Point) {
+	for (auto &component : target.base_edges) {
+		auto focus = component;
+		do {
+			if (focus->start_position().Equals(Point)) {
+				return focus;
+			}
+			if (isOnSegment(Point, focus->start_position(), focus->end_position())) {
+				return focus;
+			}
+			focus = focus->next;
+		} while (component != focus);
+	}
+	return nullptr;
+}
+
+edge* getRegionLeaving(const face* region, vertex* target) {
+	edge* focus = target->base_edge;
+	do {
+		if (focus->base_face == region) {
+			return focus;
+		}
+		focus = focus->next->inverse;
+	} while (focus != target->base_edge);
+	return nullptr;
+}
+
 struct universe {
 	face* null_region;
 	face* exterior_region;
@@ -351,149 +438,127 @@ struct universe {
 	suggested_region* rig_suggestion(TArray<FVector2D> &buffer) {
 		//start by finding a point inside the null region, if one does not exist, this region is empty :(
 
+		suggested_region* suggestion = new suggested_region();
+		suggestion->region = new face();
+
+		suggestion->components.Push(suggested_component());
+		suggested_component &component = suggestion->components.Last();
+
 
 		//find all exterior vectors and make note of them
 		const int size = buffer.Num();
 		TArray<int> exteriorPoints;
 
-		for (int ii = 0; ii < size; ii++) {
-			if (isPointStrictlyInterior(buffer[ii], *null_region)) {
-				exteriorPoints.Push(ii);
-			}
-		}
+		//FIND FIRST POINT TYPE
+		//IF 
+		component.initial_edge = new edge();
 
-		//is the region encapsulated?
-		if (exteriorPoints.Num() < 1) {
-			return nullptr;
-		}
+		enum trace_state { tracking_source, tracking_ambient };
+
+		trace_state current_state;
 
 
-		suggested_region* suggestion = new suggested_region();
-		suggestion->region = new face();
-
-		while (exteriorPoints.Num() > 0) {
-			suggestion->components.Push(suggested_component());
-			suggested_component &component = suggestion->components.Last();
-
-			int start_vector = exteriorPoints.Pop();
-			int next_vector = start_vector;
+		if (isPointStrictlyInterior(buffer[0], *null_region)) {
+			current_state = tracking_source;
 
 			vertex* initial_vertex = new vertex();
-			initial_vertex->position = buffer[start_vector];
+			initial_vertex->position = buffer[0];
 
-			component.initial_edge = new edge();
 			initial_vertex->base_edge = component.initial_edge;
 			component.initial_edge->base_vertex = initial_vertex;
 			component.initial_edge->base_face = suggestion->region;
 
-			edge* current_edge = component.initial_edge;
+		}
+		else {
+			current_state = tracking_ambient;
 
+			auto start_edge = FindEdgeWithBase(*null_region, buffer[0]);
+			if (start_edge != nullptr) {
+				if (start_edge->start_position().Equals(buffer[0])) {
+					//we lie origin
+					component.initial_edge->base_vertex = start_edge->end_vertex();
+					component.initial_edge->base_face = suggestion->region;
+					component.initial_edge->inverse = start_edge->inverse;
+				}
+				else {
+					//we lie interior
+					vertex* initial_vertex = new vertex();
+					initial_vertex->position = buffer[0];
 
-			enum trace_state { tracking_source, tracking_ambient };
+					initial_vertex->base_edge = component.initial_edge;
+					component.initial_edge->base_vertex = initial_vertex;
+					component.initial_edge->base_face = suggestion->region;
 
-			trace_state current_state = tracking_source;
+					component.initial_edge->inverse = start_edge->inverse;
+				}
+			}
+			else {
+				//this should never happen
 
-			while (true) {
-				if (current_state == tracking_source) {
-					next_vector = (next_vector + 1) % size;
-					float best_ratio = 1.1f;
-					edge* best_edge = nullptr;
-					for (auto& region : included_regions) {
-						RegionIntersectData result = calculateFirstIntersect(current_edge->start_position(), buffer[next_vector], *region);
-						if (result.ratio < best_ratio) {
-							best_ratio = result.ratio;
-							best_edge = result.target_edge;
-						}
+			}
+
+		}
+
+		int next_vector = 0;
+		edge* current_edge = component.initial_edge;
+
+		UE_LOG(LogTemp, Warning, TEXT("-------------NEW SHAPE------------"));
+
+		while (true) {
+			UE_LOG(LogTemp, Warning, TEXT("Edge From %s"), *current_edge->base_vertex->position.ToString());
+			if (current_state == tracking_source) {
+				next_vector = (next_vector + 1) % size;
+				float best_ratio = 1.1f;
+				edge* best_edge = nullptr;
+				for (auto& region : included_regions) {
+					RegionIntersectData result = calculateFirstIntersect(current_edge->start_position(), buffer[next_vector], *region);
+					if (result.ratio < best_ratio) {
+						best_ratio = result.ratio;
+						best_edge = result.target_edge;
 					}
+				}
 
-					if (best_edge == nullptr) {
-						//no intersections
+				if (best_edge == nullptr) {
+					//no intersections
 
-						if (next_vector == start_vector) {
-							//link to start
-							component.edge_types.Push(null_static);
+					if (next_vector == 0) {
+						//link to start
+						component.edge_types.Push(null_static);
 
-							current_edge->next = component.initial_edge;
-							component.initial_edge->previous = current_edge;
+						current_edge->next = component.initial_edge;
+						component.initial_edge->previous = current_edge;
 
-							edge* inverse_edge = new edge();
-							current_edge->inverse = inverse_edge;
-							inverse_edge->inverse = current_edge;
+						edge* inverse_edge = new edge();
+						current_edge->inverse = inverse_edge;
+						inverse_edge->inverse = current_edge;
 
-							inverse_edge->base_vertex = component.initial_edge->base_vertex;
-							inverse_edge->base_face = null_region;
+						inverse_edge->base_vertex = component.initial_edge->base_vertex;
+						inverse_edge->base_face = null_region;
 
-							//escape! the trace!
-							break;
-						}
-						else {
-							//create end vertex, inverse edge, and next edge
-							component.edge_types.Push(null_static);
-
-							//pop external vector from list
-							exteriorPoints.Remove(next_vector);
-
-							vertex* next_vertex = new vertex();
-							edge* next_edge = new edge();
-							edge* inverse_edge = new edge();
-
-							current_edge->next = next_edge;
-
-
-							next_vertex->position = buffer[next_vector];
-							next_vertex->base_edge = next_edge;
-
-							next_edge->base_face = suggestion->region;
-							next_edge->base_vertex = next_vertex;
-							next_edge->previous = current_edge;
-
-							current_edge->inverse = inverse_edge;
-							inverse_edge->inverse = current_edge;
-
-							inverse_edge->base_vertex = next_vertex;
-							inverse_edge->base_face = null_region;
-
-
-							current_edge = next_edge;
-						}
+						//escape! the trace!
+						break;
 					}
 					else {
-						//intersection!
+						//create end vertex, inverse edge, and next edge
+						component.edge_types.Push(null_static);
+						UE_LOG(LogTemp, Warning, TEXT("null_static"));
 
-						//needs vertex intersect check
-						//does this happen at the end of the checked segment, indicating this segment should be included
-						//does this happen at the beginning of the checked segment, indicating the previous segment should be included
-						FVector2D intersect = (buffer[next_vector] - current_edge->start_position()) * best_ratio + current_edge->start_position();
+						//pop external vector from list
+						exteriorPoints.Remove(next_vector);
 
-						vertex* next_vertex;
+						vertex* next_vertex = new vertex();
 						edge* next_edge = new edge();
 						edge* inverse_edge = new edge();
 
-						if (intersect.Equals(best_edge->end_position())) {
-							component.edge_types.Push(null_atvertex);
-
-							next_vertex = best_edge->end_vertex();
-						}
-						else if (intersect.Equals(best_edge->start_position())) {
-							component.edge_types.Push(null_atvertex);
-							best_edge = best_edge->previous;
-
-							next_vertex = best_edge->end_vertex();
-						}
-						else {
-							component.edge_types.Push(null_intersect);
-							next_vertex = new vertex();
-							next_vertex->position = intersect;
-							next_vertex->base_edge = next_edge;
-						}
-
 						current_edge->next = next_edge;
+
+
+						next_vertex->position = buffer[next_vector];
+						next_vertex->base_edge = next_edge;
 
 						next_edge->base_face = suggestion->region;
 						next_edge->base_vertex = next_vertex;
 						next_edge->previous = current_edge;
-
-						next_edge->inverse = best_edge;
 
 						current_edge->inverse = inverse_edge;
 						inverse_edge->inverse = current_edge;
@@ -501,86 +566,135 @@ struct universe {
 						inverse_edge->base_vertex = next_vertex;
 						inverse_edge->base_face = null_region;
 
+
 						current_edge = next_edge;
-						current_state = tracking_ambient;
 					}
 				}
-				else if (current_state == tracking_ambient) {
-					//does this segment intersect anything?
-					float best_ratio = 1.1f;
-					int best_index = -1;
+				else {
+					//intersection!
 
-					for (int ii = 0; ii < size; ii++) {
-						float ratio = intersectRatio(current_edge->start_position(), current_edge->end_position(), buffer[ii], buffer[(ii + 1) % size]);
-						if (ratio < best_ratio && ratio > 0.f) {
-							best_ratio = ratio;
-							best_index = ii;
-						}
+					//needs vertex intersect check
+					//does this happen at the end of the checked segment, indicating this segment should be included
+					//does this happen at the beginning of the checked segment, indicating the previous segment should be included
+					FVector2D intersect = (buffer[next_vector] - current_edge->start_position()) * best_ratio + current_edge->start_position();
+
+					vertex* next_vertex;
+					edge* next_edge = new edge();
+					edge* inverse_edge = new edge();
+
+					if (intersect.Equals(best_edge->start_position())) {
+						best_edge = best_edge->inverse->next->inverse;
 					}
-					if (best_index >= 0) {
-						// intersect!
 
-						//needs vertex intersect check
-						//does this happen at the end of the checked segment, indicating this segment should be included
-						//does this happen at the beginning of the checked segment, indicating the previous segment should be included
-						FVector2D intersect = (current_edge->end_position() - current_edge->start_position()) * best_ratio + current_edge->start_position();
+					if (intersect.Equals(best_edge->end_position())) {
+						next_vertex = best_edge->end_vertex();
 
-						vertex* next_vertex;
-						edge* next_edge = new edge();
+						current_edge->inverse = inverse_edge;
+						inverse_edge->inverse = current_edge;
 
-						if (intersect.Equals(current_edge->start_position())) {
-							component.edge_types.Push(connected_atvertex);
+						inverse_edge->base_vertex = next_vertex;
+						inverse_edge->base_face = null_region;
 
-							next_vertex = current_edge->base_vertex;
-						}
-						else {
-							component.edge_types.Push(connected_intersect);
-							next_vertex = new vertex();
-							next_vertex->position = intersect;
-							next_vertex->base_edge = next_edge;
-						}
+						component.edge_types.Push(null_atvertex);
+						UE_LOG(LogTemp, Warning, TEXT("null_atvertex"));
 
-						current_edge->next = next_edge;
-
-						next_edge->base_face = suggestion->region;
-						next_edge->base_vertex = next_vertex;
-						next_edge->previous = current_edge;
-
-						current_edge = next_edge;
-						current_state = tracking_source;
-
-						next_vector = best_index;
+						//we need to find the relevant entering edge, by finding which has the minimum angle 
+						best_edge = getRegionLeaving(null_region, next_vertex);
 					}
 					else {
-						// no intersect
-						component.edge_types.Push(connected_static);
+						component.edge_types.Push(null_intersect);
+						UE_LOG(LogTemp, Warning, TEXT("null_intersect"));
+						next_vertex = new vertex();
+						next_vertex->position = intersect;
+						next_vertex->base_edge = next_edge;
 
-						edge* next_edge = new edge();
+						current_edge->inverse = inverse_edge;
+						inverse_edge->inverse = current_edge;
 
-						current_edge->next = next_edge;
+						inverse_edge->base_vertex = next_vertex;
+						inverse_edge->base_face = null_region;
+					}
 
-						next_edge->base_face = suggestion->region;
-						next_edge->base_vertex = current_edge->inverse->base_vertex;
-						next_edge->previous = current_edge;
-						next_edge->inverse = current_edge->inverse->previous;
+					current_edge->next = next_edge;
 
-						edge* preview = current_edge->inverse->previous;
-						if (preview->inverse->base_face == null_region) {
-							next_edge->inverse = preview;
-						}
-						else {
-							next_edge->inverse = preview->inverse->previous;
-						}
+					next_edge->base_face = suggestion->region;
+					next_edge->base_vertex = next_vertex;
+					next_edge->previous = current_edge;
 
-						current_edge = next_edge;
+					next_edge->inverse = best_edge;
+
+					current_edge = next_edge;
+					current_state = tracking_ambient;
+				}
+			}
+			else if (current_state == tracking_ambient) {
+				//does this segment intersect anything?
+				float best_ratio = 1.1f;
+				int best_index = -1;
+
+				for (int ii = 0; ii < size; ii++) {
+					float ratio = intersectRatio(current_edge->start_position(), current_edge->end_position(), buffer[ii], buffer[(ii + 1) % size]);
+					if (ratio < best_ratio && ratio > 0.f) {
+						best_ratio = ratio;
+						best_index = ii;
 					}
 				}
-			};
+				if (best_index >= 0) {
+					// intersect!
 
+					//needs vertex intersect check
+					//does this happen at the end of the checked segment, indicating this segment should be included
+					//does this happen at the beginning of the checked segment, indicating the previous segment should be included
+					FVector2D intersect = (current_edge->end_position() - current_edge->start_position()) * best_ratio + current_edge->start_position();
 
+					vertex* next_vertex;
+					edge* next_edge = new edge();
 
+					if (intersect.Equals(current_edge->end_position())) {
+						component.edge_types.Push(connected_atvertex);
+						UE_LOG(LogTemp, Warning, TEXT("connected_atvertex"));
 
-		}
+						next_vertex = current_edge->end_vertex();
+					}
+					else {
+						component.edge_types.Push(connected_intersect);
+						UE_LOG(LogTemp, Warning, TEXT("connected_intersect"));
+
+						next_vertex = new vertex();
+						next_vertex->position = intersect;
+						next_vertex->base_edge = next_edge;
+					}
+
+					current_edge->next = next_edge;
+
+					next_edge->base_face = suggestion->region;
+					next_edge->base_vertex = next_vertex;
+					next_edge->previous = current_edge;
+
+					current_edge = next_edge;
+					current_state = tracking_source;
+
+					next_vector = best_index;
+				}
+				else {
+					// no intersect
+					component.edge_types.Push(connected_static);
+					UE_LOG(LogTemp, Warning, TEXT("connected_static"));
+
+					edge* next_edge = new edge();
+
+					current_edge->next = next_edge;
+
+					next_edge->base_face = suggestion->region;
+					next_edge->base_vertex = current_edge->inverse->base_vertex;
+					next_edge->previous = current_edge;
+					next_edge->inverse = current_edge->inverse->inverse->next->inverse;
+
+					current_edge = next_edge;
+				}
+			}
+		};
+
 
 		return suggestion;
 
@@ -607,6 +721,26 @@ struct universe {
 	void enact_suggestion(suggested_region &target) {
 		//see notebook
 
+		if (target.components.Num() < 1) {
+			return;
+		}
+
+		if (target.components[0].edge_types.Num() < 1) {
+
+			auto focus_edge = target.components[0].initial_edge;
+
+			target.region->base_edges.Push(focus_edge);
+
+			do {
+				null_region->base_edges.Remove(focus_edge);
+
+				focus_edge->base_face = target.region;
+
+				focus_edge = focus_edge->next;
+			} while (focus_edge != target.components[0].initial_edge);
+
+			return;
+		}
 
 
 		//for each component, wrap around
@@ -626,7 +760,7 @@ struct universe {
 					current_edge->inverse->previous = current_edge->next->inverse;
 				}
 				else if (current_type == null_intersect) {
-					last_intersect = current_edge;
+					null_region->base_edges.Push(current_edge->inverse);
 					connected = true;
 
 					//subdivide next->inverse
@@ -634,74 +768,59 @@ struct universe {
 
 					current_edge->next->inverse->subdivide(current_edge->next->start_position());
 
-					current_edge->next->inverse->inverse->previous->next = current_edge->inverse;
+					current_edge->next->inverse->inverse->previous->next = current_edge->inverse; //???
 					current_edge->inverse->previous = current_edge->next->inverse->inverse->previous;
+					//current_edge->inverse->previous->next = current_edge->inverse; //why the fuck is this not taking
+
+					current_edge->next->inverse->inverse->previous = nullptr;
 				}
 				else if (current_type == null_atvertex) {
-					last_intersect = current_edge;
+					null_region->base_edges.Push(current_edge->inverse);
 					connected = true;
 
 					//connect next->inverse->next->inverse to inverse or connect to appropriate edge
 
 					current_edge->next->inverse->inverse->previous->next = current_edge->inverse;
 					current_edge->inverse->previous = current_edge->next->inverse->inverse->previous;
+
+					current_edge->next->inverse->inverse->previous = nullptr;
 				}
 				else if (current_type == connected_static) {
-					if (null_region->isBaseEdge(current_edge->inverse->inverse)) {
-						null_region->base_edges.Remove(current_edge->inverse->inverse);
-						null_region->base_edges.Push(last_intersect);
-						last_intersect = nullptr;
-					}
-
 					//replace inverse inverse reference with self and DELETE
 
+					current_edge->inverse->inverse->next->previous = nullptr;
+
+					null_region->base_edges.Remove(current_edge->inverse->inverse);
 					delete current_edge->inverse->inverse;
 					current_edge->inverse->inverse = current_edge;
+
 				}
 				else if (current_type == connected_intersect) {
-					if (null_region->isBaseEdge(current_edge->inverse->inverse)) {
-						null_region->base_edges.Remove(current_edge->inverse->inverse);
-						null_region->base_edges.Push(last_intersect);
-						last_intersect = nullptr;
-					}
-					else if (last_intersect != nullptr) {
-						null_region->base_edges.Push(last_intersect);
-						last_intersect = nullptr;
-					}
-
 					//subdivide inverse
 					//connect inverse->inverse to next->inverse
 					//set inverse to inverse->next
 					//replace inverse inverse reference with self and DELETE
 
-					current_edge->subdivide(current_edge->next->start_position());
+					current_edge->inverse->subdivide(current_edge->next->start_position());
 
 					//current_edge now points to the one preceding the desired, config its inverse before correcting
 					current_edge->inverse->inverse->previous = current_edge->next->inverse;
 					current_edge->next->inverse->next = current_edge->inverse->inverse;
 
-					current_edge->inverse = current_edge->inverse->next;
+					current_edge->inverse = current_edge->inverse->inverse->previous->inverse;
 
+					null_region->base_edges.Remove(current_edge->inverse->inverse);
 					delete current_edge->inverse->inverse;
 					current_edge->inverse->inverse = current_edge;
 				}
 				else { //current_type == connected_atvertex
-					if (null_region->isBaseEdge(current_edge->inverse->inverse)) {
-						null_region->base_edges.Remove(current_edge->inverse->inverse);
-						null_region->base_edges.Push(last_intersect);
-						last_intersect = nullptr;
-					}
-					else if (last_intersect != nullptr) {
-						null_region->base_edges.Push(last_intersect);
-						last_intersect = nullptr;
-					}
-
 					//connect inverse->inverse->next to next->inverse
 					//replace inverse inverse reference with self and DELETE
 
 					current_edge->inverse->inverse->next->previous = current_edge->next->inverse;
-					current_edge->next->inverse->next = current_edge->inverse->inverse;
+					current_edge->next->inverse->next = current_edge->inverse->inverse->next;
 
+					null_region->base_edges.Remove(current_edge->inverse->inverse);
 					delete current_edge->inverse->inverse;
 					current_edge->inverse->inverse = current_edge;
 				}
@@ -713,9 +832,14 @@ struct universe {
 				null_region->base_edges.Push(component.initial_edge);
 			}
 
+			null_region->resolveBasis();
+
+
 		}
 
 		target.region->base_edges.Push(target.components[0].initial_edge);
+
+		included_regions.Push(target.region);
 	};
 
 };
@@ -1511,16 +1635,34 @@ TArray<FVector2D> Inset(const TArray<FVector2D> &source, int32 width) {
 
 void Aroom_description_builder::Main_Generation_Loop() {
 	{
-		auto test_bounds = gen_bounds(6, 6, FVector2D(0, 0), 0);
+		TArray<FVector2D> test_bounds;
+		test_bounds.Push(FVector2D(-6, -6));
+		test_bounds.Push(FVector2D(-4, -2));
+		test_bounds.Push(FVector2D(-4, 2));
+		test_bounds.Push(FVector2D(-6, 4));
+		test_bounds.Push(FVector2D(6, 4));
+		test_bounds.Push(FVector2D(6, -6));
+
+		//auto test_bounds = gen_bounds(6, 6, FVector2D(0, 0), 0);
 		universe test_system(test_bounds);
 
-		auto bounds = gen_bounds(4, 4, FVector2D(-6, 0), 0);
-		auto culled = Path_to_Vector(Return_Allowed_Largest_Region(bounds, test_system.null_region->Export_Interior()));
-		auto suggested = test_system.rig_suggestion(culled);
+		auto bounds_a = gen_bounds(2, 2, FVector2D(-2, 0), 0);
+		auto culled_a = Path_to_Vector(Return_Allowed_Largest_Region(bounds_a, test_system.null_region->Export_Interior()));
+		auto suggested_a = test_system.rig_suggestion(culled_a);
+		test_system.enact_suggestion(*suggested_a);
 
-		test_system.enact_suggestion(*suggested);
+		auto bounds_b = gen_bounds(2, 2, FVector2D(0, 0), 0);
+		auto culled_b = Path_to_Vector(Return_Allowed_Largest_Region(bounds_b, test_system.null_region->Export_Interior()));
+		auto suggested_b = test_system.rig_suggestion(culled_b);
+		test_system.enact_suggestion(*suggested_b);
 
-		DrawBorder(Path_to_Vector(suggested->region->Export_Interior()[0]), 0, GetWorld());
+		auto bounds_c = gen_bounds(2, 2, FVector2D(0, 2), 0);
+		auto culled_c = Path_to_Vector(Return_Allowed_Largest_Region(bounds_c, test_system.null_region->Export_Interior()));
+		auto suggested_c = test_system.rig_suggestion(culled_c);
+		test_system.enact_suggestion(*suggested_c);
+
+
+		//DrawBorder(Path_to_Vector(suggested->region->Export_Interior()[0]), 0, GetWorld());
 	}
 
 
