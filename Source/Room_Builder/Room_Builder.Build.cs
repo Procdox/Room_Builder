@@ -69,6 +69,7 @@ public class Room_Builder : ModuleRules
 			);
 
         LoadClipper(Target);
+        //LoadDCEL(Target);
     }
 
     public bool LoadClipper(ReadOnlyTargetRules Target)
@@ -91,6 +92,30 @@ public class Room_Builder : ModuleRules
         }
 
         Definitions.Add(string.Format("WITH_CLIPPERLIB_BINDING={0}", isLibrarySupported ? 1 : 0));
+
+        return isLibrarySupported;
+    }
+
+    public bool LoadDCEL(ReadOnlyTargetRules Target)
+    {
+        bool isLibrarySupported = false;
+
+        if ((Target.Platform == UnrealTargetPlatform.Win64) || (Target.Platform == UnrealTargetPlatform.Win32))
+        {
+            isLibrarySupported = true;
+
+            string PlatformString = (Target.Platform == UnrealTargetPlatform.Win64) ? "x64" : "x86";
+            string LibrariesPath = Path.Combine(ThirdPartyPath, "DCEL", "Libraries");
+
+            PublicAdditionalLibraries.Add(Path.Combine(LibrariesPath, "DCEL." + PlatformString + ".lib"));
+        }
+
+        if (isLibrarySupported)
+        {
+            PublicIncludePaths.Add(Path.Combine(ThirdPartyPath, "DCEL", "Includes"));
+        }
+
+        Definitions.Add(string.Format("WITH_DCEL_LIB_BINDING={0}", isLibrarySupported ? 1 : 0));
 
         return isLibrarySupported;
     }

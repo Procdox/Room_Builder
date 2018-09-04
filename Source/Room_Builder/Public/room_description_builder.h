@@ -6,6 +6,8 @@
 #include "GameFramework/Actor.h"
 #include "ProceduralMeshComponent.h"
 #include "../ThirdParty/ClipperLib/Includes/ClipperLib.h"
+//#include "../ThirdParty/DCEL/Includes/DCEL.h"
+#include "DCEL.h"
 #include "room_description_builder.generated.h"
 
 USTRUCT()
@@ -64,9 +66,8 @@ public:
 
 	void CreateDoor(const FVector2D &a, const FVector2D &b, float Bottom, float Top);
 
-	void Create_Floor_Ceiling(const TArray<FVector2D> &Border, float bottom, float top);
-
-	void Create_Wall_Sections(const TArray<FVector2D> &Wall_Sections, float Bottom, float Top);
+	void Create_Floor_Ceiling_New(const F_DCEL::Face* source, float bottom, float top);
+	void Create_Wall_Sections_New(const F_DCEL::Face* source, float Bottom, float Top, int &h);
 
 	void Main_Generation_Loop();
 
