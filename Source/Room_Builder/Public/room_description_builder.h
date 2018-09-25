@@ -31,7 +31,7 @@ class ROOM_BUILDER_API Aroom_description_builder : public AActor
 {
 	GENERATED_BODY()
 
-		UPROPERTY(EditAnyWhere, Category = "gen_config")
+	UPROPERTY(EditAnyWhere, Category = "gen_config")
 		USceneComponent* root;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")

@@ -3,18 +3,25 @@
 #include "CoreMinimal.h"
 #include "DCEL.generated.h"
 
+static bool compare_float(const float &a, const float &b) {
+	return (FMath::Abs(a - b) < (FLT_EPSILON * FMath::Max3(FMath::Abs(a), FMath::Abs(b), 1.f)));
+}
+
+#define grid_coef 2.f
+#define P_micro_grid (1.f/grid_coef)
+
 struct _P {
 	int markup;
 	float X;
 	float Y;
 	_P() {
-		X = 0;
-		Y = 0;
+		X = 0.f;
+		Y = 0.f;
 		markup = 0;
 	}
 	_P(int m) {
-		X = 0;
-		Y = 0;
+		X = 0.f;
+		Y = 0.f;
 		markup = m;
 	}
 	_P(float x, float y) {
@@ -28,8 +35,14 @@ struct _P {
 		markup = m;
 	}
 
+	void toGrid(float interval) {
+		X = FMath::RoundHalfFromZero(X / interval) * interval; //GRID ROUNDING
+		Y = FMath::RoundHalfFromZero(Y / interval) * interval; //GRID ROUNDING
+	}
+
 	bool Equals(const _P &test) const {
-		return (std::abs(test.X - X) < DBL_EPSILON && std::abs(test.Y - Y) < DBL_EPSILON);
+		return compare_float(test.X, X) && compare_float(test.Y, Y);
+		//return (FMath::Abs(test.X - X) < FLT_EPSILON && FMath::Abs(test.Y - Y) < FLT_EPSILON); //FLOAT_COMPARISON
 	}
 	_P operator+(const _P &add) const {
 		return _P(X + add.X, Y + add.Y);
@@ -43,6 +56,14 @@ struct _P {
 	_P operator/(float div) const {
 		return _P(X / div, Y / div);
 	}
+	_P& operator*=(float a) {
+		X *= a;
+		Y *= a;
+	}
+	_P& operator/=(float a) {
+		X /= a;
+		Y /= a;
+	}
 	bool operator==(const _P &compare) const {
 		return Equals(compare);
 	}
@@ -54,6 +75,10 @@ struct _P {
 	}
 	void Normalize() {
 		const float size = Size();
+		if (compare_float(size, 0.f)){
+		//if (FMath::Abs(size) < FLT_EPSILON) { //FLOAT_COMPARISON
+			return;
+		}
 		X /= size;
 		Y /= size;
 	}
@@ -86,7 +111,8 @@ struct _P {
 		if (A.Size() < B.Size()) {
 			A.Normalize();
 			B.Normalize();
-			return 1 - _P::Dot(A, B) < .0000001;
+			return compare_float(1.f, _P::Dot(A, B));
+			//return 1 - _P::Dot(A, B) < FLT_EPSILON; //FLOAT_COMPARISON
 		}
 		return false;
 	}
@@ -100,7 +126,154 @@ struct _P {
 		if (orientation < 0) {
 			bisector = bisector * -1;
 		}
-		else if (orientation == 0) {
+		else if (compare_float(orientation, 0)) {
+		//else if (FMath::Abs(orientation) < FLT_EPSILON) { //FLOAT_COMPARISON
+			bisector = test_concave;
+		}
+
+
+		return _P::Dot(bisector, left) <= _P::Dot(bisector, test);
+	}
+
+};
+
+struct _Pi {
+	int X;
+	int Y;
+	_Pi() {
+		X = 0.f;
+		Y = 0.f;
+	}
+	_Pi(int m) {
+		X = 0.f;
+		Y = 0.f;
+	}
+	_Pi(int x, int y) {
+		X = x;
+		Y = y;
+	}
+	_Pi(int x, int y, int m) {
+		X = x;
+		Y = y;
+	}
+
+	_Pi operator+(const _Pi &add) const {
+		return _Pi(X + add.X, Y + add.Y);
+	}
+	_Pi operator-(const _Pi &sub) const {
+		return _Pi(X - sub.X, Y - sub.Y);
+	}
+	_Pi operator*(int mul) const {
+		return _Pi(X * mul, Y * mul);
+	}
+	_Pi operator*(const _Pi &mul) const {
+		return _Pi(X * mul.X, Y * mul.Y);
+	}
+	//_Pi operator/(float div) const {
+	//	return _Pi(X / div, Y / div);
+	//}
+	//_Pi operator/(const _Pi &div) const {
+	//	return _Pi(X / div.X, Y / div.Y);
+	//}
+
+	_Pi& operator+=(const _Pi &add) {
+		X += add.X;
+		Y += add.Y;
+	}
+	_Pi& operator-=(const _Pi &sub) {
+		X -= sub.X;
+		Y -= sub.Y;
+	}
+	_Pi& operator*=(float mul) {
+		X *= mul;
+		Y *= mul;
+	}
+	_Pi& operator*=(const _Pi &mul) {
+		X *= mul.X;
+		Y *= mul.Y;
+	}
+	//_Pi& operator/=(float div) {
+	//	X /= div;
+	//	Y /= div;
+	//}
+	//_Pi& operator/=(const _Pi &div) {
+	//	X /= div.X;
+	//	Y /= div.Y;
+	//}
+
+	bool operator==(const _Pi &test) const {
+		return test.X == X && test.Y == Y;
+	}
+	bool operator!=(const _Pi &test) const {
+		return test.X != X || test.Y != Y;
+	}
+	int SizeSquared() {
+		return X * X + Y * Y;
+	}
+	float Size() {
+		return FMath::Sqrt(SizeSquared());
+	}
+	void Normalize() {
+		const float size = Size();
+		if (compare_float(size, 0.f)) {
+			return;
+		}
+		X /= size;
+		Y /= size;
+	}
+
+	int Dot(const _Pi &b) {
+		return X*b.X + Y*b.Y;
+	}
+	static int Dot(const _Pi &a, const _Pi &b) {
+		return a.X*b.X + a.Y*b.Y;
+	}
+
+	static int Area(const TArray<_Pi> &boundary) {
+		float total = 0;
+
+		const int Num = boundary.Num();
+
+		for (int ii = 0; ii < Num; ii++) {
+			const _Pi &current = boundary[ii];
+			const _Pi &next = boundary[(ii + 1) % Num];
+			const float width = next.X - current.X;
+			const float avg_height = (next.Y + current.Y) / 2;
+
+			total += width * avg_height;
+		}
+
+		return total;
+	}
+
+	static bool isOnSegment(const _Pi &test, const _Pi &a, const _Pi &b) {
+		if (test == a) {
+			return true;
+		}
+		_Pi A = test - a;
+		_Pi B = b - a;
+
+
+		if (A.Size() < B.Size()) {
+			A.Normalize();
+			B.Normalize();
+			return compare_float(1.f, _Pi::Dot(A, B));
+			//return 1 - _P::Dot(A, B) < FLT_EPSILON; //FLOAT_COMPARISON
+		}
+		return false;
+	}
+	static bool inRegionCW(const _P &left, const _P &right, const _P &test) {
+		_P bisector = left + right;
+		bisector.Normalize();
+
+		//test and fix for concavity
+		const _P test_concave(left.Y, -left.X);
+		const float orientation = _P::Dot(right, test_concave);
+		if (orientation < 0) {
+			bisector = bisector * -1;
+		}
+		else if (compare_float(orientation, 0)) {
+			//else if (FMath::Abs(orientation) < FLT_EPSILON) { //FLOAT_COMPARISON
 			bisector = test_concave;
 		}
 
@@ -389,17 +562,30 @@ struct ROOM_BUILDER_API F_DCEL {
 			int region;
 			_P point;
 			interact_point* next;
+			int mid_state;
 			interact_point(const _P p) {
 				region = -1;
 				state = unknown_region;
 				point = p;
 				next = nullptr;
+				mid_state = -1;
 			}
 			interact_point(const _P p, interact_point* n) {
 				region = -1;
 				state = unknown_region;
 				point = p;
 				next = n;
+				mid_state = -1;
+			}
+		};
+		struct strand {
+			Edge* interior_edge;
+			Edge* exterior_edge;
+			bool unique_interior;
+			bool unique_exterior;
+			strand() {
+				unique_interior = true;
+				unique_exterior = true;
 			}
 		};
 	public:
@@ -412,6 +598,23 @@ struct ROOM_BUILDER_API F_DCEL {
 		Edge* getHole(int index) const {
 			return hole_edges[index];
 		}
+		F_DCEL* getDad() const {
+			return dad;
+		}
+		TArray<Face*> getNeighbors() const {
+			TArray<Face*> result;
+			const Edge* focus = root_edge;
+
+			do {
+				Face* canidate = focus->inverse_edge->face;
+				if (!result.Contains(canidate)) {
+					result.Push(canidate);
+				}
+				focus = focus->next_edge;
+			} while (focus != root_edge);
+
+			return result;
+		}
 
 		interaction_state getPointState(const _P &test_point) const;
 
@@ -420,9 +623,11 @@ struct ROOM_BUILDER_API F_DCEL {
 		Edge* getContainingSegment(const _P &test_point) const;
 		//splits this face into two sets of faces, the intersect components of this face and the supposed border, and the difference components of this face minus the supposed border
 		//returns false if no non-trivial intersect exists
-		void subAllocateFace(const TArray<_P> &border, TArray<Face*> &interior_regions, TArray<Face*> &exterior_regions);
+		bool subAllocateFace(const TArray<_P> &border, TArray<Face*> &interior_regions, TArray<Face*> &exterior_regions);
 
 		bool mergeWithFace(Face* target);
+
+		bool contains(const _P &test_point);
 
 		int borderCount(int safety) const {
 			if (root_edge == nullptr) {
@@ -448,6 +653,109 @@ struct ROOM_BUILDER_API F_DCEL {
 			} while (focus != hole_edges[hole] && length <= safety);
 
 			return length;
+		}
+
+		void cleanBorder() {
+			//merge parrallel sections that do not have joints build in
+
+			// BOUNDARY
+			auto focus = root_edge;
+			do {
+				auto next = focus->next_edge;
+				//parrallel check
+
+				auto start = focus->getStartPoint()->position;
+				auto end = focus->getEndPoint()->position - start;
+				auto test = next->getEndPoint()->position - start;
+				end.Normalize();
+				test.Normalize();
+
+				bool is_unjointed = (focus->inverse_edge->last_edge == focus->next_edge->inverse_edge);
+				bool is_parrallel = ((1 - _P::Dot(end, test)) < FLT_EPSILON);
+
+				if (is_unjointed && is_parrallel) {
+					if (root_edge == next) {
+						root_edge = focus;
+					}
+					auto neighbor = next->inverse_edge->face;
+
+					if (neighbor->root_edge == next->inverse_edge) {
+						neighbor->root_edge = focus->inverse_edge;
+					}
+					for (int ii = 0; ii < neighbor->hole_edges.Num(); ii++) {
+						if (neighbor->hole_edges[ii] == next->inverse_edge) {
+							neighbor->hole_edges[ii] = focus->inverse_edge;
+						}
+					}
+
+					//MERGE
+					focus->next_edge = next->next_edge;
+					next->next_edge->last_edge = focus;
+
+					focus->inverse_edge->last_edge = next->inverse_edge->last_edge;
+					next->inverse_edge->last_edge->next_edge = focus->inverse_edge;
+
+					focus->inverse_edge->root_point = next->inverse_edge->root_point;
+
+					dad->removePoint(next->root_point);
+					dad->removeEdge(next->inverse_edge);
+					dad->removeEdge(next);
+				}
+				else {
+					focus = focus->next_edge;
+				}
+			} while (focus != root_edge);
+
+			for (int kk = 0; kk < hole_edges.Num(); kk++) {
+				auto focus = hole_edges[kk];
+				do {
+					auto next = focus->next_edge;
+					//parrallel check
+
+					auto start = focus->getStartPoint()->position;
+					auto end = focus->getEndPoint()->position - start;
+					auto test = next->getEndPoint()->position - start;
+					end.Normalize();
+					test.Normalize();
+
+					bool is_unjointed = (focus->inverse_edge->last_edge == focus->next_edge->inverse_edge);
+					bool is_parrallel = ((1 - _P::Dot(end, test)) < FLT_EPSILON);
+
+					if (is_unjointed && is_parrallel) {
+						if (hole_edges[kk] == next) {
+							hole_edges[kk] = focus;
+						}
+						auto neighbor = next->inverse_edge->face;
+
+						if (neighbor->root_edge == next->inverse_edge) {
+							neighbor->root_edge = focus->inverse_edge;
+						}
+						for (int ii = 0; ii < neighbor->hole_edges.Num(); ii++) {
+							if (neighbor->hole_edges[ii] == next->inverse_edge) {
+								neighbor->hole_edges[ii] = focus->inverse_edge;
+							}
+						}
+
+						//MERGE
+						focus->next_edge = next->next_edge;
+						next->next_edge->last_edge = focus;
+
+						focus->inverse_edge->last_edge = next->inverse_edge->last_edge;
+						next->inverse_edge->last_edge->next_edge = focus->inverse_edge;
+
+						focus->inverse_edge->root_point = next->inverse_edge->root_point;
+
+						dad->removePoint(next->root_point);
+						dad->removeEdge(next->inverse_edge);
+						dad->removeEdge(next);
+					}
+					else {
+						focus = focus->next_edge;
+					}
+				} while (focus != hole_edges[kk]);
+			}
+
+			dad->sanityCheck();
 		}
 	};
 
@@ -517,8 +825,9 @@ struct ROOM_BUILDER_API F_DCEL {
 		const double area = _P::Area(boundary);
 		const int Num = boundary.Num();
 
-		if (area == 0) {
+		if (FMath::Abs(area) < FLT_EPSILON) {
 			//return nullptr;
+			return nullptr;
 			//undefinded behavior!
 		}
 		else if (area < 0) {
@@ -570,12 +879,45 @@ struct ROOM_BUILDER_API F_DCEL {
 		interior->root_edge = local_edges[0];
 		universe->hole_edges.Push(local_edges[1]);
 
+		sanityCheck();
 		return interior;
 	}
 
 	Face* createUniverse() {
 		Face* product = new Face(this);
 		faces.Push(product);
+		sanityCheck();
 		return product;
+	}
+
+	//runs basic sanity checks on all elements
+	void sanityCheck() {
+		for (auto edge : edges) {
+			check(edge->inverse_edge->inverse_edge == edge);
+			check(edge->next_edge->last_edge == edge);
+			check(edge->last_edge->next_edge == edge);
+
+			check(edge->inverse_edge->root_point == edge->next_edge->root_point);
+			check(edge->face == edge->next_edge->face);
+		}
+
+		for (auto point : points) {
+		//	check(point->root_edge->root_point == point);
+			//point->position.X = FMath::RoundToInt(point->position.X / 10) * 10.f; //GRID ROUNDING
+			//point->position.Y = FMath::RoundToInt(point->position.Y / 10) * 10.f; //GRID ROUNDING
+			_P temp = point->position;
+			temp.toGrid(P_micro_grid);
+			check(point->position == temp);
+			//point->position.toGrid(P_micro_grid);
+		}
+
+		for (auto face : faces) {
+			if (face->root_edge != nullptr) {
+				check(face->root_edge->face == face);
+			}
+			for (auto edge : face->hole_edges) {
+				check(edge->face == face);
+			}
+		}
 	}
 };

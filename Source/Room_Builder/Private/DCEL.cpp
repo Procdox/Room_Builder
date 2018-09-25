@@ -2,10 +2,6 @@
 //
 #include "DCEL.h"
 
-bool testIntersect() {
-	return false;
-};
-
 void F_DCEL::Edge::subdivide(const _P &location) {
 	Edge* follows = dad->makeEdge();
 	Edge* follows_inverse = dad->makeEdge();
@@ -58,7 +54,7 @@ bool isPointContained(const _P &test_point, const F_DCEL::Edge* start_edge) {
 	int count = 0;
 
 	const F_DCEL::Edge* best_edge = nullptr;
-	double best_distance = DBL_MAX;
+	float best_distance = FLT_MAX;
 
 	do {
 		const _P &start_vector = focus->getStartPoint()->getPosition();
@@ -66,8 +62,10 @@ bool isPointContained(const _P &test_point, const F_DCEL::Edge* start_edge) {
 
 
 		//does it sit on 
-		if (start_vector.Y == end_vector.Y) {
-			if (test_point.Y == start_vector.Y) {
+		if(compare_float(start_vector.Y, end_vector.Y)) {
+		//if (FMath::Abs(start_vector.Y - end_vector.Y) < FLT_EPSILON) { //FLOAT_COMPARISON
+			if(compare_float(test_point.Y, start_vector.Y)) {
+			//if (FMath::Abs(test_point.Y - start_vector.Y) < FLT_EPSILON) { //FLOAT_COMPARISON
 				if ((start_vector.X <= test_point.X && test_point.X <= end_vector.X) ||
 					(start_vector.X >= test_point.X && test_point.X >= end_vector.X)) {
 					return true; //lies on border
@@ -77,20 +75,21 @@ bool isPointContained(const _P &test_point, const F_DCEL::Edge* start_edge) {
 			continue;
 		}
 
-		double y_offset = test_point.Y - start_vector.Y;
-		double y_length = end_vector.Y - start_vector.Y;
-		double y_ratio = y_offset / y_length;
+		float y_offset = test_point.Y - start_vector.Y;
+		float y_length = end_vector.Y - start_vector.Y;
+		float y_ratio = y_offset / y_length;
 
-		if (y_ratio <= 1.f && y_ratio >= 0.f) {
+		if (y_ratio <= 1.f && y_ratio >= 0) {
 
-			double x_length = end_vector.X - start_vector.X;
-			double x = start_vector.X + x_length * y_ratio;
+			float x_length = end_vector.X - start_vector.X;
+			float x = start_vector.X + x_length * y_ratio;
 
-			if (x == test_point.X) {
+			if(compare_float(x, test_point.X)) {
+			//if (FMath::Abs(x - test_point.X) < FLT_EPSILON) { //FLOAT_COMPARISON
 				return true; //lies on border
 			}
 
-			double distance = x - test_point.X;
+			float distance = x - test_point.X;
 			if (distance > 0 && distance < best_distance) {
 				best_distance = distance;
 				best_edge = focus;
@@ -110,7 +109,8 @@ bool isPointContained(const _P &test_point, const F_DCEL::Edge* start_edge) {
 	const _P end = best_edge->getEndPoint()->getPosition();
 
 	//does it sit on the ends?
-	if (test_point.Y == start.Y) {
+	if(compare_float(test_point.Y, start.Y)) {
+	//if (FMath::Abs(test_point.Y - start.Y) < FLT_EPSILON) { //FLOAT_COMPARISON
 		//check before
 		_P offset = test_point - start;
 		_P left = end - start;
@@ -123,9 +123,11 @@ bool isPointContained(const _P &test_point, const F_DCEL::Edge* start_edge) {
 			return false;
 		}
 	}
-	else if (test_point.Y == end.Y) {
+	else if (compare_float(test_point.Y, end.Y)) {
+	//else if (FMath::Abs(test_point.Y - end.Y) < FLT_EPSILON) { //FLOAT_COMPARISON
+		//check after
 		_P offset = test_point - end;
-		_P left = best_edge->getNextEdge()->getEndPoint()->getPosition() - start;
+		_P left = best_edge->getNextEdge()->getEndPoint()->getPosition() - end;
 		_P right = start - end;
 		offset.Normalize();
 		left.Normalize();
@@ -150,6 +152,10 @@ bool isPointContained(const _P &test_point, const F_DCEL::Edge* start_edge) {
 
 
 	return true;
+}
+
+bool F_DCEL::Face::contains(const _P &test_point) {
+	return isPointContained(test_point, root_edge);
 }
 
 //interaction code
@@ -206,20 +212,19 @@ interaction_state F_DCEL::Face::getPointState(const _P &test_point) const {
 	return external_region;
 }
 
-
-
-double getIntersectRatio(const _P &A_S, const _P &A_E, const _P &B_S, const _P &B_E) {
-	double ua, ub, denom;
+float getIntersectRatio(const _P &A_S, const _P &A_E, const _P &B_S, const _P &B_E) {
+	float ua, ub, denom;
 
 	denom = (B_E.Y - B_S.Y)*(A_E.X - A_S.X) - (B_E.X - B_S.X)*(A_E.Y - A_S.Y);
-	if (denom == 0) {
+	if (compare_float(denom, 0.f)){
+	//if (FMath::Abs(denom) < FLT_EPSILON) { //FLOAT_COMPARISON
 		return -1.f;
 	}
 
 	ua = ((B_E.X - B_S.X)*(A_S.Y - B_S.Y) - (B_E.Y - B_S.Y)*(A_S.X - B_S.X)) / denom;
 	ub = ((A_E.X - A_S.X)*(A_S.Y - B_S.Y) - (A_E.Y - A_S.Y)*(A_S.X - B_S.X)) / denom;
 
-	if (ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1) {
+	if (ua >= 0.f && ua <= 1.f && ub >= 0.f && ub <= 1.f) {
 		return ua;
 	}
 
@@ -231,15 +236,23 @@ double getIntersectRatio(const _P &A_S, const _P &A_E, const _P &B_S, const _P &
 //odd are boundary
 // 0 external, 1 main boundary, 2 interior, 2n+3 hole boundary, 2n+4 hole interior
 interaction_state F_DCEL::Face::getFirstIntersect(const _P &start, const _P &end, _P &intersect) const {
-	double best_ratio = 1.0;
+	float best_ratio = 1.0;
 	interaction_state result = unknown_region;
+	_P direction = end - start;
+	float length = direction.Size();
+
+
 	if (root_edge != nullptr) {
 		Edge* focus = root_edge;
 		do {
-			double ratio = getIntersectRatio(start, end, focus->getStartPoint()->getPosition(), focus->getEndPoint()->getPosition());
-			if (ratio > 0.0 && ratio < best_ratio) {
-				best_ratio = ratio;
-				result = external_boundary;
+			float ratio = getIntersectRatio(start, end, focus->getStartPoint()->getPosition(), focus->getEndPoint()->getPosition());
+			if (ratio > 0 && ratio < best_ratio) { //FLOAT_COMPARISON
+				intersect = start + direction * ratio;
+				intersect.toGrid(P_micro_grid);
+				if (!(intersect == start)) {
+					best_ratio = ratio;
+					result = external_boundary;
+				}
 			}
 			focus = focus->getNextEdge();
 		} while (focus != root_edge);
@@ -248,19 +261,24 @@ interaction_state F_DCEL::Face::getFirstIntersect(const _P &start, const _P &end
 	int ii = -1;
 	for (auto root : hole_edges) {
 		ii++;
-		Edge* focus = root;
+		Edge* focus = root; 
 		do {
-			double ratio = getIntersectRatio(start, end, focus->getStartPoint()->getPosition(), focus->getEndPoint()->getPosition());
-			if (ratio > 0.0 && ratio < best_ratio) {
-				best_ratio = ratio;
-				result = 3 + 2 * ii;
+			float ratio = getIntersectRatio(start, end, focus->getStartPoint()->getPosition(), focus->getEndPoint()->getPosition());
+			if (ratio > 1.f / length && ratio < best_ratio) { //FLOAT_COMPARISON
+				intersect = start + direction * ratio;
+				intersect.toGrid(P_micro_grid);
+				if (!(intersect == start)) {
+					best_ratio = ratio;
+					result = 3 + 2 * ii;
+				}
 			}
 			focus = focus->getNextEdge();
 		} while (focus != root);
 	}
 
-	_P direction = end - start;
 	intersect = start + direction * best_ratio;
+	intersect.toGrid(P_micro_grid);
+	
 	return result;
 }
 
@@ -288,20 +306,23 @@ F_DCEL::Edge* F_DCEL::Face::getContainingSegment(const _P &test_point) const {
 //culls a polygon to the region represented by this face, then culls from tjos face that region to create a set of new regions
 //interior regions are relevant to the proposed polygon
 //exterior are regions not relevant to the proposed, but members of this still
-void F_DCEL::Face::subAllocateFace(const TArray<_P> &border, TArray<Face*> &interior_regions, TArray<Face*> &exterior_regions) {
+bool F_DCEL::Face::subAllocateFace(const TArray<_P> &border, TArray<Face*> &interior_regions, TArray<Face*> &exterior_regions) {
 	//any point is exterior, interior, or border-intersecting
 	int f_i = 0;
 	const int Num = border.Num();
-	const double area = _P::Area(border);
+	const float area = _P::Area(border);
 
-	if (area == 0) {
+	if(compare_float(area, 0.f)) {
+	//if (FMath::Abs(area) < FLT_EPSILON) { //FLOAT_COMPARISON
 		//return nullptr;
 		//undefinded behavior!
+		dad->sanityCheck();
+		return false;
 	}
 	else if (area < 0) {
 		//shape is oriented incorrectly
 		TArray<_P> reveresed_boundary;
-		for (int ii = Num - 1; ii >= 0; ii++) {
+		for (int ii = Num - 1; ii >= 0; ii--) {
 			reveresed_boundary.Push(border[ii]);
 		}
 		return subAllocateFace(reveresed_boundary, interior_regions, exterior_regions);
@@ -327,6 +348,7 @@ void F_DCEL::Face::subAllocateFace(const TArray<_P> &border, TArray<Face*> &inte
 		//test point
 		if (focus->state == unknown_region) {
 			focus->state = getPointState(focus->point);
+			UE_LOG(LogTemp, Warning, TEXT("N: interaction for (%f, %f), type %d."), focus->point.X, focus->point.Y, focus->state);
 		}
 
 		if (focus->state > 2) {
@@ -336,15 +358,23 @@ void F_DCEL::Face::subAllocateFace(const TArray<_P> &border, TArray<Face*> &inte
 		//test for intersects
 		_P intersect_point;
 		interaction_state intersect_result = getFirstIntersect(focus->point, focus->next->point, intersect_point);
-		if (intersect_result != unknown_region) {
+		//intersect_point.X = FMath::RoundToInt(intersect_point.X * 10) / 10; //GRID ROUNDING
+		//intersect_point.Y = FMath::RoundToInt(intersect_point.Y * 10) / 10; //GRID ROUNDING
+		//intersect_point.toGrid(P_micro_grid);
 
+		if (intersect_result != unknown_region) {
+			UE_LOG(LogTemp, Warning, TEXT("I: intersect at (%f, %f), type %d"), intersect_point.X, intersect_point.Y, intersect_result);
 			//create new point
+			
 			interact_point* temp = new interact_point(intersect_point, focus->next);
 
 			interactions.Push(temp);
 			focus->next = temp;
 			focus->next->state = intersect_result;
 		}
+		_P mid = (focus->point + focus->next->point) / 2;
+		focus->mid_state = getPointState(mid);
+
 		focus = focus->next;
 
 	} while (focus != interactions[0]);
@@ -364,16 +394,7 @@ void F_DCEL::Face::subAllocateFace(const TArray<_P> &border, TArray<Face*> &inte
 	}
 	};*/
 
-	struct strand {
-		Edge* interior_edge;
-		Edge* exterior_edge;
-		bool unique_interior;
-		bool unique_exterior;
-		strand() {
-			unique_interior = true;
-			unique_exterior = true;
-		}
-	};
+	
 
 	//test for trivial containment cases
 	bool all_exterior = true;
@@ -381,99 +402,79 @@ void F_DCEL::Face::subAllocateFace(const TArray<_P> &border, TArray<Face*> &inte
 	bool all_hole = true;
 	bool boundary_connected = false;
 
-	int discovered_hole_index = -1;
-
 	for (int index = 0; index < interactions.Num(); index++) {
 		const int state = interactions[index]->state;
 
-		if (state == 0) {
+		if (state == 0) { //exterior
 			all_interior = false;
 			all_hole = false;
 		}
-		else if (state == 1) {
+		else if (state == 1) { //boundary
 			all_hole = false;
 			boundary_connected = true;
 		}
-		else if (state == 2) {
+		else if (state == 2) { //interior
 			all_exterior = false;
 			all_hole = false;
 		}
-		else {
+		else if (state % 2 == 1) { //hole boundary
 			all_exterior = false;
-			all_interior = false;
-
-			if (state % 2 == 1) {
-				all_hole = false;
-			}
-			else {
-				int hole_index = (state - 3) / 2;
-
-				if (discovered_hole_index == -1) {
-					discovered_hole_index = hole_index;
-				}
-
-				if (discovered_hole_index != hole_index) {
-					all_hole = false;
-				}
-			}
-		}
-
-		if (state == 0) {
 			all_interior = false;
 			all_hole = false;
 		}
-		else {
+		else { //hole interior
 			all_exterior = false;
-			if (state == 1) {
-				all_hole = false;
-				all_exterior = false;
-			}
-			else if (state == 2) {
-				all_hole = false;
-			}
-			else
-			{
-				all_interior = false;
-
-				int hole_index = (state - 3) / 2;
-				if (discovered_hole_index == -1) {
-					discovered_hole_index = hole_index;
-				}
-				if (discovered_hole_index != hole_index) {
-					all_hole = false;
-				}
-			}
+			all_interior = false;
 		}
 	}
 	//if suggested contains existing, return existing as interior
 	//if existing contains suggested, make a new hole and that is your result
 	//if contained in a hole, return null
-	if (all_exterior && !boundary_connected) {
+	if (all_exterior) {
 		//if that boundary contains this, then it becomes this, otherwise it is culled to null
-		//check for containment
-		Face* test = dad->createFace(border);
+		if (root_edge != nullptr) {
+			Face* test = dad->createFace(border);
+			bool contained = true;
+			bool sepperated = true;
+			auto points = root_edge->listPoints();
 
-		if (root_edge != nullptr && isPointContained(root_edge->getStartPoint()->getPosition(), test->getRootEdge())) {
-			interior_regions.Push(this);
+			for (auto point : points) {
+				if (!isPointContained(point, test->getRootEdge())) {
+					contained = false;
+				}
+				else {
+					sepperated = false;
+				}
+			}
+
+			dad->removeFace(test);
+
+			if (contained) {
+				interior_regions.Push(this);
+				dad->sanityCheck();
+				return true;
+			}
+			if (sepperated) {
+				dad->sanityCheck();
+				return false;
+			}
 		}
-		else {
-			exterior_regions.Push(this);
-		}
-		return;
 	}
+
 
 	//is the suggested region contained entirely within the target region
 	if (all_interior && !boundary_connected) {
 		Face* interior = dad->createFace(border, this);
 		interior_regions.Push(interior);
 		exterior_regions.Push(this);
-		return;
+		dad->sanityCheck();
+		return true;
 	}
 
 	//is the suggested region entirely contained in another set of regions represented here as a hole
 	if (all_hole) {
-		exterior_regions.Push(this);
-		return;
+		dad->sanityCheck();
+		return false;
 	}
 
 	TArray<strand*> strands;
@@ -506,6 +507,8 @@ void F_DCEL::Face::subAllocateFace(const TArray<_P> &border, TArray<Face*> &inte
 				Edge* local_a = nullptr; //getContainingSegment(focus->point);
 				TArray<_P> debug_compare;
 
+				
+
 				for (auto edge : eligible_edges) {
 					debug_compare.Push(edge->getStartPoint()->getPosition());
 					debug_compare.Push(edge->getEndPoint()->getPosition());
@@ -515,6 +518,8 @@ void F_DCEL::Face::subAllocateFace(const TArray<_P> &border, TArray<Face*> &inte
 						break;
 					}
 				}
+
+				check(focus->state % 2 == 1);
 
 				if (focus->point.Equals(local_a->getEndPoint()->getPosition())) {
 					//find appropriate owning edge from root
@@ -584,8 +589,11 @@ void F_DCEL::Face::subAllocateFace(const TArray<_P> &border, TArray<Face*> &inte
 					_P::isOnSegment(focus->next->point, local->getStartPoint()->getPosition(), local->getEndPoint()->getPosition()))) { //is the next point on a different edge
 
 					_P mid = (focus->point + focus->next->point) / 2;
+					auto point_state = getPointState(mid);
+					UE_LOG(LogTemp, Warning, TEXT("L: Testing Mid Point Between (%f, %f)and (%f, %f)."), focus->point.X, focus->point.Y, focus->next->point.X, focus->next->point.Y);
+					UE_LOG(LogTemp, Warning, TEXT("L: Testing Mid Point (%f, %f), type %d, Predicted %d."), mid.X, mid.Y, point_state, focus->mid_state);
 
-					if (getPointState(mid) == 2) { //is the mid point of this section interior to the region, or the hole
+					if (focus->mid_state == 2) { //is the mid point of this section interior to the region, or the hole
 
 						mid_strand = true;
 
@@ -686,7 +694,8 @@ void F_DCEL::Face::subAllocateFace(const TArray<_P> &border, TArray<Face*> &inte
 		for (auto focus : interactions) {
 			delete focus;
 		}
-		return;
+		dad->sanityCheck();
+		return false;
 	}
 
 	//find unique sections
@@ -791,11 +800,24 @@ void F_DCEL::Face::subAllocateFace(const TArray<_P> &border, TArray<Face*> &inte
 			}
 		}
 	}
+	
+	auto master = dad;
 
 	if (boundary_connected) {
-		delete this;
+		master->removeFace(this);
 	}
-	return;
+
+	master->sanityCheck();
+
+	for (auto string : strands) {
+		delete string;
+	}
+
+	for (auto focus : interactions) {
+		delete focus;
+	}
+	
+	return true;
 }
 
 //attempts to merge target faces to self by continuity across a shared edge section.
@@ -973,6 +995,8 @@ bool F_DCEL::Face::mergeWithFace(Face* target) {
 			dad->removeFace(target);
 		}
 
+		dad->sanityCheck();
+		cleanBorder();
 		return true;
 	}
 	else { //they are bound to a hole, or not at all ============================================
@@ -1105,10 +1129,13 @@ bool F_DCEL::Face::mergeWithFace(Face* target) {
 					dad->removeFace(target);
 				}
 
+				dad->sanityCheck();
+				cleanBorder();
 				return true;
 			}
 		}
 
+		dad->sanityCheck();
 		return false;
 	}
 }
