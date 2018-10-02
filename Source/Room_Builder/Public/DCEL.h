@@ -3,91 +3,119 @@
 #include "CoreMinimal.h"
 #include "DCEL.generated.h"
 
-static bool compare_float(const float &a, const float &b) {
-	return (FMath::Abs(a - b) < (FLT_EPSILON * FMath::Max3(FMath::Abs(a), FMath::Abs(b), 1.f)));
-}
+//MARK FLOAT USED
+
+//static bool compare_float(const float &a, const float &b) {
+//	return (FMath::Abs(a - b) < (FLT_EPSILON * FMath::Max3(FMath::Abs(a), FMath::Abs(b), 1.f)));
+//}
 
 #define grid_coef 2.f
-#define P_micro_grid (1.f/grid_coef)
+
+enum point_near_segment_state {left_of_segment, right_of_segment, before_segment, after_segment, on_start, on_end, on_segment};
 
 struct _P {
-	int markup;
-	float X;
-	float Y;
+	int X;
+	int Y;
 	_P() {
 		X = 0.f;
 		Y = 0.f;
-		markup = 0;
 	}
 	_P(int m) {
 		X = 0.f;
 		Y = 0.f;
-		markup = m;
 	}
-	_P(float x, float y) {
+	_P(int x, int y) {
 		X = x;
 		Y = y;
-		markup = 0;
 	}
-	_P(float x, float y, int m) {
+	_P(int x, int y, int m) {
 		X = x;
 		Y = y;
-		markup = m;
 	}
 
-	void toGrid(float interval) {
-		X = FMath::RoundHalfFromZero(X / interval) * interval; //GRID ROUNDING
-		Y = FMath::RoundHalfFromZero(Y / interval) * interval; //GRID ROUNDING
-	}
-
-	bool Equals(const _P &test) const {
-		return compare_float(test.X, X) && compare_float(test.Y, Y);
-		//return (FMath::Abs(test.X - X) < FLT_EPSILON && FMath::Abs(test.Y - Y) < FLT_EPSILON); //FLOAT_COMPARISON
-	}
 	_P operator+(const _P &add) const {
 		return _P(X + add.X, Y + add.Y);
 	}
 	_P operator-(const _P &sub) const {
 		return _P(X - sub.X, Y - sub.Y);
 	}
-	_P operator*(float mul) const {
+	_P operator*(int mul) const {
 		return _P(X * mul, Y * mul);
 	}
-	_P operator/(float div) const {
+	_P operator*(const _P &mul) const {
+		return _P(X * mul.X, Y * mul.Y);
+	}
+	_P operator/(int div) const {
+		check(X % div == 0);
+		check(Y % div == 0);
 		return _P(X / div, Y / div);
 	}
-	_P& operator*=(float a) {
-		X *= a;
-		Y *= a;
+	_P operator/(const _P &div) const {
+		check(X % div.X == 0);
+		check(Y % div.Y == 0);
+		return _P(X / div.X, Y / div.Y);
 	}
-	_P& operator/=(float a) {
-		X /= a;
-		Y /= a;
+
+	_P& operator+=(const _P &add) {
+		X += add.X;
+		Y += add.Y;
 	}
-	bool operator==(const _P &compare) const {
-		return Equals(compare);
+	_P& operator-=(const _P &sub) {
+		X -= sub.X;
+		Y -= sub.Y;
 	}
-	float SizeSquared() {
+	_P& operator*=(float mul) {
+		X *= mul;
+		Y *= mul;
+	}
+	_P& operator*=(const _P &mul) {
+		X *= mul.X;
+		Y *= mul.Y;
+	}
+	_P& operator/=(int div) {
+		check(X % div == 0);
+		check(Y % div == 0);
+		X /= div;
+		Y /= div;
+	}
+	_P& operator/=(const _P &div) {
+		check(X % div.X == 0);
+		check(Y % div.Y == 0);
+		X /= div.X;
+		Y /= div.Y;
+	}
+
+	bool operator==(const _P &test) const {
+		return test.X == X && test.Y == Y;
+	}
+	bool operator!=(const _P &test) const {
+		return test.X != X || test.Y != Y;
+	}
+	int SizeSquared() const {
 		return X * X + Y * Y;
 	}
-	float Size() {
-		return FMath::Sqrt(SizeSquared());
+	float Size() const {
+		return FMath::Sqrt(SizeSquared()); //MARK FLOAT USED
 	}
-	void Normalize() {
-		const float size = Size();
-		if (compare_float(size, 0.f)){
-		//if (FMath::Abs(size) < FLT_EPSILON) { //FLOAT_COMPARISON
-			return;
-		}
-		X /= size;
-		Y /= size;
+	//void Normalize() {
+	//	const int sizeSq = SizeSquared();
+	//	const int sizeSq = SizeSquared();
+	//	if (sizeSq == 0) {
+	//		return;
+	//	}
+	//	X /= size;
+	//	Y /= size;
+	//}
+
+	int Dot(const _P &b) const {
+		return X*b.X + Y*b.Y;
 	}
-	static float Dot(const _P &a, const _P &b) {
-		return a.X*b.X + a.Y*b.Y;
-	}
-	static float Area(const TArray<_P> &boundary) {
+
+	static int Area(const TArray<_P> &boundary) {
 		float total = 0;
+
 		const int Num = boundary.Num();
+
 		for (int ii = 0; ii < Num; ii++) {
 			const _P &current = boundary[ii];
 			const _P &next = boundary[(ii + 1) % Num];
@@ -100,186 +128,82 @@ struct _P {
 		return total;
 	}
 
+	point_near_segment_state getState(const _P &start, const _P &end) const {
+		if (*this == start) {
+			return on_start;
+		}
+		if (*this == end) {
+			return on_start;
+		}
+
+		const int TWAT = (X * start.Y - Y * start.X) + (start.X * end.Y - start.Y * end.X) + (end.X * Y - end.Y * X);
+		if (TWAT > 0) {
+			return left_of_segment;
+		}
+		if (TWAT < 0) {
+			return right_of_segment;
+		}
+
+		const int target_size = (start - end).SizeSquared();
+		if ((*this - end).SizeSquared() > target_size) {
+			return before_segment;
+		}
+		if ((*this - start).SizeSquared() > target_size) {
+			return after_segment;
+		}
+
+		return on_segment;
+	}
+
+	static bool areParrallel(const _P &A_S, const _P &A_E, const _P &B_S, const _P &B_E) {
+		const _P A = A_E - A_S;
+		const _P A_R = A + B_S;
+
+		//if A lies on B or after it they are parrallel
+		auto state = A_R.getState(B_S, B_E);
+		return (state == on_segment || state == on_end || state == after_segment);
+
+	}
+
 	static bool isOnSegment(const _P &test, const _P &a, const _P &b) {
-		if (test.Equals(a)) {
-			return true;
-		}
-		_P A = test - a;
-		_P B = b - a;
-
-
-		if (A.Size() < B.Size()) {
-			A.Normalize();
-			B.Normalize();
-			return compare_float(1.f, _P::Dot(A, B));
-			//return 1 - _P::Dot(A, B) < FLT_EPSILON; //FLOAT_COMPARISON
-		}
-		return false;
-	}
-	static bool inRegionCW(const _P &left, const _P &right, const _P &test) {
-		_P bisector = left + right;
-		bisector.Normalize();
-
-		//test and fix for concavity
-		const _P test_concave(left.Y, -left.X);
-		const float orientation = _P::Dot(right, test_concave);
-		if (orientation < 0) {
-			bisector = bisector * -1;
-		}
-		else if (compare_float(orientation, 0)) {
-		//else if (FMath::Abs(orientation) < FLT_EPSILON) { //FLOAT_COMPARISON
-			bisector = test_concave;
-		}
-
-
-		return _P::Dot(bisector, left) <= _P::Dot(bisector, test);
+		auto state = test.getState(a, b);
+		return (state == on_segment || state == on_start);
 	}
 
-};
-
-struct _Pi {
-	int X;
-	int Y;
-	_Pi() {
-		X = 0.f;
-		Y = 0.f;
-	}
-	_Pi(int m) {
-		X = 0.f;
-		Y = 0.f;
-	}
-	_Pi(int x, int y) {
-		X = x;
-		Y = y;
-	}
-	_Pi(int x, int y, int m) {
-		X = x;
-		Y = y;
+	static bool inRegionCW(const _P &test, const _P &before, const _P &corner, const _P &after) {
+		return (test.getState(before, corner) == right_of_segment && test.getState(corner, after) == right_of_segment);
 	}
 
-	_Pi operator+(const _Pi &add) const {
-		return _Pi(X + add.X, Y + add.Y);
-	}
-	_Pi operator-(const _Pi &sub) const {
-		return _Pi(X - sub.X, Y - sub.Y);
-	}
-	_Pi operator*(int mul) const {
-		return _Pi(X * mul, Y * mul);
-	}
-	_Pi operator*(const _Pi &mul) const {
-		return _Pi(X * mul.X, Y * mul.Y);
-	}
-	//_Pi operator/(float div) const {
-	//	return _Pi(X / div, Y / div);
-	//}
-	//_Pi operator/(const _Pi &div) const {
-	//	return _Pi(X / div.X, Y / div.Y);
+	//static bool isOnSegment(const _P &test, const _P &a, const _P &b) {
+	//	if (test == a) {
+	//		return true;
+	//	}
+	//	_P A = test - a;
+	//	_P B = b - a;
+	//	if (A.SizeSquared() < B.SizeSquared()) {
+	//		A.Normalize();
+	//		B.Normalize();
+	//		return compare_float(1.f, _P::Dot(A, B)); //MARK FLOAT USED
+	//		//return 1 - _P::Dot(A, B) < FLT_EPSILON; //FLOAT_COMPARISON
+	//	}
+	//	return false;
 	//}
 
-	_Pi& operator+=(const _Pi &add) {
-		X += add.X;
-		Y += add.Y;
-	}
-	_Pi& operator-=(const _Pi &sub) {
-		X -= sub.X;
-		Y -= sub.Y;
-	}
-	_Pi& operator*=(float mul) {
-		X *= mul;
-		Y *= mul;
-	}
-	_Pi& operator*=(const _Pi &mul) {
-		X *= mul.X;
-		Y *= mul.Y;
-	}
-	//_Pi& operator/=(float div) {
-	//	X /= div;
-	//	Y /= div;
+	//static bool inRegionCW(const _P &left, const _P &right, const _P &test) {
+	//	_P bisector = left + right;
+	//	bisector.Normalize();
+	//	//test and fix for concavity
+	//	const _P test_concave(left.Y, -left.X);
+	//	const float orientation = _P::Dot(right, test_concave); //MARK FLOAT USED
+	//	if (orientation < 0) {
+	//		bisector = bisector * -1;
+	//	}
+	//	else if (compare_float(orientation, 0)) { //MARK FLOAT USED
+	//		//else if (FMath::Abs(orientation) < FLT_EPSILON) { //FLOAT_COMPARISON
+	//		bisector = test_concave;
+	//	}
+	//	return _P::Dot(bisector, left) <= _P::Dot(bisector, test); //MARK FLOAT USED
 	//}
-	//_Pi& operator/=(const _Pi &div) {
-	//	X /= div.X;
-	//	Y /= div.Y;
-	//}
-
-	bool operator==(const _Pi &test) const {
-		return test.X == X && test.Y == Y;
-	}
-	bool operator!=(const _Pi &test) const {
-		return test.X != X || test.Y != Y;
-	}
-	int SizeSquared() {
-		return X * X + Y * Y;
-	}
-	float Size() {
-		return FMath::Sqrt(SizeSquared());
-	}
-	void Normalize() {
-		const float size = Size();
-		if (compare_float(size, 0.f)) {
-			return;
-		}
-		X /= size;
-		Y /= size;
-	}
-
-	int Dot(const _Pi &b) {
-		return X*b.X + Y*b.Y;
-	}
-	static int Dot(const _Pi &a, const _Pi &b) {
-		return a.X*b.X + a.Y*b.Y;
-	}
-
-	static int Area(const TArray<_Pi> &boundary) {
-		float total = 0;
-
-		const int Num = boundary.Num();
-
-		for (int ii = 0; ii < Num; ii++) {
-			const _Pi &current = boundary[ii];
-			const _Pi &next = boundary[(ii + 1) % Num];
-			const float width = next.X - current.X;
-			const float avg_height = (next.Y + current.Y) / 2;
-
-			total += width * avg_height;
-		}
-
-		return total;
-	}
-
-	static bool isOnSegment(const _Pi &test, const _Pi &a, const _Pi &b) {
-		if (test == a) {
-			return true;
-		}
-		_Pi A = test - a;
-		_Pi B = b - a;
-
-
-		if (A.Size() < B.Size()) {
-			A.Normalize();
-			B.Normalize();
-			return compare_float(1.f, _Pi::Dot(A, B));
-			//return 1 - _P::Dot(A, B) < FLT_EPSILON; //FLOAT_COMPARISON
-		}
-		return false;
-	}
-	static bool inRegionCW(const _P &left, const _P &right, const _P &test) {
-		_P bisector = left + right;
-		bisector.Normalize();
-
-		//test and fix for concavity
-		const _P test_concave(left.Y, -left.X);
-		const float orientation = _P::Dot(right, test_concave);
-		if (orientation < 0) {
-			bisector = bisector * -1;
-		}
-		else if (compare_float(orientation, 0)) {
-			//else if (FMath::Abs(orientation) < FLT_EPSILON) { //FLOAT_COMPARISON
-			bisector = test_concave;
-		}
-
-
-		return _P::Dot(bisector, left) <= _P::Dot(bisector, test);
-	}
 
 };
 
@@ -396,7 +320,7 @@ struct ROOM_BUILDER_API F_DCEL {
 			Edge* focus = this;
 			do {
 				if (focus->getStartPoint() && focus->getEndPoint()) {
-					if (test_point.Equals(focus->getStartPoint()->getPosition()) ||
+					if (test_point == focus->getStartPoint()->getPosition() ||
 						_P::isOnSegment(test_point, focus->getStartPoint()->getPosition(), focus->getEndPoint()->getPosition())) {
 
 						return focus;
@@ -665,13 +589,16 @@ struct ROOM_BUILDER_API F_DCEL {
 				//parrallel check
 
 				auto start = focus->getStartPoint()->position;
-				auto end = focus->getEndPoint()->position - start;
-				auto test = next->getEndPoint()->position - start;
-				end.Normalize();
-				test.Normalize();
+				auto end = focus->getEndPoint()->position;
+				auto test = next->getEndPoint()->position;
+
+				auto state = test.getState(start, end);
+
+				//end.Normalize();
+				//test.Normalize();
 
 				bool is_unjointed = (focus->inverse_edge->last_edge == focus->next_edge->inverse_edge);
-				bool is_parrallel = ((1 - _P::Dot(end, test)) < FLT_EPSILON);
+				bool is_parrallel = (state == after_segment);//((1 - _P::Dot(end, test)) < FLT_EPSILON);
 
 				if (is_unjointed && is_parrallel) {
 					if (root_edge == next) {
@@ -713,13 +640,15 @@ struct ROOM_BUILDER_API F_DCEL {
 					//parrallel check
 
 					auto start = focus->getStartPoint()->position;
-					auto end = focus->getEndPoint()->position - start;
-					auto test = next->getEndPoint()->position - start;
-					end.Normalize();
-					test.Normalize();
+					auto end = focus->getEndPoint()->position;
+					auto test = next->getEndPoint()->position;
+					//end.Normalize();
+					//test.Normalize();
+
+					auto state = test.getState(start, end);
 
 					bool is_unjointed = (focus->inverse_edge->last_edge == focus->next_edge->inverse_edge);
-					bool is_parrallel = ((1 - _P::Dot(end, test)) < FLT_EPSILON);
+					bool is_parrallel = (state == after_segment);//((1 - _P::Dot(end, test)) < FLT_EPSILON); //MARK FLOAT USED
 
 					if (is_unjointed && is_parrallel) {
 						if (hole_edges[kk] == next) {
@@ -906,7 +835,7 @@ struct ROOM_BUILDER_API F_DCEL {
 			//point->position.X = FMath::RoundToInt(point->position.X / 10) * 10.f; //GRID ROUNDING
 			//point->position.Y = FMath::RoundToInt(point->position.Y / 10) * 10.f; //GRID ROUNDING
 			_P temp = point->position;
-			temp.toGrid(P_micro_grid);
+			//temp.toGrid(P_micro_grid);
 			check(point->position == temp);
 			//point->position.toGrid(P_micro_grid);
 		}

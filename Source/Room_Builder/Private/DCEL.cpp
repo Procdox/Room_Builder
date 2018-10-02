@@ -54,7 +54,7 @@ bool isPointContained(const _P &test_point, const F_DCEL::Edge* start_edge) {
 	int count = 0;
 
 	const F_DCEL::Edge* best_edge = nullptr;
-	float best_distance = FLT_MAX;
+	int best_distance = FLT_MAX;
 
 	do {
 		const _P &start_vector = focus->getStartPoint()->getPosition();
@@ -62,10 +62,8 @@ bool isPointContained(const _P &test_point, const F_DCEL::Edge* start_edge) {
 
 
 		//does it sit on 
-		if(compare_float(start_vector.Y, end_vector.Y)) {
-		//if (FMath::Abs(start_vector.Y - end_vector.Y) < FLT_EPSILON) { //FLOAT_COMPARISON
-			if(compare_float(test_point.Y, start_vector.Y)) {
-			//if (FMath::Abs(test_point.Y - start_vector.Y) < FLT_EPSILON) { //FLOAT_COMPARISON
+		if(start_vector.Y == end_vector.Y) {
+			if(test_point.Y == start_vector.Y) {
 				if ((start_vector.X <= test_point.X && test_point.X <= end_vector.X) ||
 					(start_vector.X >= test_point.X && test_point.X >= end_vector.X)) {
 					return true; //lies on border
@@ -75,21 +73,19 @@ bool isPointContained(const _P &test_point, const F_DCEL::Edge* start_edge) {
 			continue;
 		}
 
-		float y_offset = test_point.Y - start_vector.Y;
-		float y_length = end_vector.Y - start_vector.Y;
-		float y_ratio = y_offset / y_length;
+		int y_offset = test_point.Y - start_vector.Y;
+		int y_length = end_vector.Y - start_vector.Y;
 
-		if (y_ratio <= 1.f && y_ratio >= 0) {
+		if (y_offset <= y_length && y_offset >= 0) {
 
-			float x_length = end_vector.X - start_vector.X;
-			float x = start_vector.X + x_length * y_ratio;
+			int x_length = end_vector.X - start_vector.X;
+			int x = start_vector.X + ((x_length * y_offset) / y_length);
 
-			if(compare_float(x, test_point.X)) {
-			//if (FMath::Abs(x - test_point.X) < FLT_EPSILON) { //FLOAT_COMPARISON
-				return true; //lies on border
+			if(x == test_point.X) {
+				return true;
 			}
 
-			float distance = x - test_point.X;
+			int distance = x - test_point.X;
 			if (distance > 0 && distance < best_distance) {
 				best_distance = distance;
 				best_edge = focus;
@@ -109,45 +105,25 @@ bool isPointContained(const _P &test_point, const F_DCEL::Edge* start_edge) {
 	const _P end = best_edge->getEndPoint()->getPosition();
 
 	//does it sit on the ends?
-	if(compare_float(test_point.Y, start.Y)) {
-	//if (FMath::Abs(test_point.Y - start.Y) < FLT_EPSILON) { //FLOAT_COMPARISON
+	if(test_point.Y == start.Y) {
 		//check before
-		_P offset = test_point - start;
-		_P left = end - start;
-		_P right = best_edge->getLastEdge()->getStartPoint()->getPosition() - start;
-		offset.Normalize();
-		left.Normalize();
-		right.Normalize();
 
-		if (_P::inRegionCW(left, right, offset) != polarity) {
+		if (_P::inRegionCW(test_point, best_edge->getLastEdge()->getStartPoint()->getPosition(), start, end) != polarity) {
 			return false;
 		}
 	}
-	else if (compare_float(test_point.Y, end.Y)) {
-	//else if (FMath::Abs(test_point.Y - end.Y) < FLT_EPSILON) { //FLOAT_COMPARISON
+	else if (test_point.Y == end.Y) {
 		//check after
-		_P offset = test_point - end;
-		_P left = best_edge->getNextEdge()->getEndPoint()->getPosition() - end;
-		_P right = start - end;
-		offset.Normalize();
-		left.Normalize();
-		right.Normalize();
 
-		if (_P::inRegionCW(left, right, offset) != polarity) {
+		if (_P::inRegionCW(test_point, start, end, best_edge->getNextEdge()->getEndPoint()->getPosition()) != polarity) {
 			return false;
 		}
 	}
 	else {
-		//check if planar to the closest
-		_P best_direction = end - start;
+		//check if right of the closest
+		auto state = test_point.getState(start, end);
 
-		best_direction.Normalize();
-
-		_P inwards(best_direction.Y, -best_direction.X);
-
-		if ((_P::Dot(inwards, (test_point - start)) > 0) != polarity) {
-			return false;
-		}
+		return (state == right_of_segment);
 	}
 
 
@@ -212,46 +188,65 @@ interaction_state F_DCEL::Face::getPointState(const _P &test_point) const {
 	return external_region;
 }
 
-float getIntersectRatio(const _P &A_S, const _P &A_E, const _P &B_S, const _P &B_E) {
-	float ua, ub, denom;
+int getIntersect(const _P &A_S, const _P &A_E, const _P &B_S, const _P &B_E, _P &Result) {
+	int ua, ub, denom;
 
 	denom = (B_E.Y - B_S.Y)*(A_E.X - A_S.X) - (B_E.X - B_S.X)*(A_E.Y - A_S.Y);
-	if (compare_float(denom, 0.f)){
-	//if (FMath::Abs(denom) < FLT_EPSILON) { //FLOAT_COMPARISON
-		return -1.f;
+	if (denom == 0.f) { //REFACTOR
+		return -1;
 	}
 
-	ua = ((B_E.X - B_S.X)*(A_S.Y - B_S.Y) - (B_E.Y - B_S.Y)*(A_S.X - B_S.X)) / denom;
-	ub = ((A_E.X - A_S.X)*(A_S.Y - B_S.Y) - (A_E.Y - A_S.Y)*(A_S.X - B_S.X)) / denom;
+	ua = ((B_E.X - B_S.X)*(A_S.Y - B_S.Y) - (B_E.Y - B_S.Y)*(A_S.X - B_S.X));
+	ub = ((A_E.X - A_S.X)*(A_S.Y - B_S.Y) - (A_E.Y - A_S.Y)*(A_S.X - B_S.X));
 
-	if (ua >= 0.f && ua <= 1.f && ub >= 0.f && ub <= 1.f) {
-		return ua;
+	if (ua >= 0.f && ua <= denom && ub >= 0.f && ub <= denom) {
+		Result.X = (A_E.X - A_S.X) * ua / denom;
+		Result.X = (B_E.X - B_S.X) * ub / denom;
+		return (A_S - Result).SizeSquared();
 	}
 
-	return -1.f;
+	return -1;
 }
+
+//float getIntersectRatio(const _P &A_S, const _P &A_E, const _P &B_S, const _P &B_E) {
+//	float ua, ub, denom;
+//
+//	denom = (B_E.Y - B_S.Y)*(A_E.X - A_S.X) - (B_E.X - B_S.X)*(A_E.Y - A_S.Y);
+//	if (compare_float(denom, 0.f)){ //REFACTOR
+//		return -1.f;
+//	}
+//
+//	ua = ((B_E.X - B_S.X)*(A_S.Y - B_S.Y) - (B_E.Y - B_S.Y)*(A_S.X - B_S.X)) / denom;
+//	ub = ((A_E.X - A_S.X)*(A_S.Y - B_S.Y) - (A_E.Y - A_S.Y)*(A_S.X - B_S.X)) / denom;
+//
+//	if (ua >= 0.f && ua <= 1.f && ub >= 0.f && ub <= 1.f) {
+//		return ua;
+//	}
+//
+//	return -1.f;
+//}
 
 //interaction code
 //even are in region
 //odd are boundary
 // 0 external, 1 main boundary, 2 interior, 2n+3 hole boundary, 2n+4 hole interior
 interaction_state F_DCEL::Face::getFirstIntersect(const _P &start, const _P &end, _P &intersect) const {
-	float best_ratio = 1.0;
+	int best_distance = INT_MAX;
 	interaction_state result = unknown_region;
 	_P direction = end - start;
 	float length = direction.Size();
+	_P temp_intersect;
 
 
 	if (root_edge != nullptr) {
 		Edge* focus = root_edge;
 		do {
-			float ratio = getIntersectRatio(start, end, focus->getStartPoint()->getPosition(), focus->getEndPoint()->getPosition());
-			if (ratio > 0 && ratio < best_ratio) { //FLOAT_COMPARISON
-				intersect = start + direction * ratio;
-				intersect.toGrid(P_micro_grid);
+			int distance = getIntersect(start, end, focus->getStartPoint()->getPosition(), focus->getEndPoint()->getPosition(), temp_intersect);
+			if (distance > 0 && distance < best_distance) {
 				if (!(intersect == start)) {
-					best_ratio = ratio;
+					best_distance = distance;
 					result = external_boundary;
+					intersect = temp_intersect;
 				}
 			}
 			focus = focus->getNextEdge();
@@ -263,21 +258,17 @@ interaction_state F_DCEL::Face::getFirstIntersect(const _P &start, const _P &end
 		ii++;
 		Edge* focus = root; 
 		do {
-			float ratio = getIntersectRatio(start, end, focus->getStartPoint()->getPosition(), focus->getEndPoint()->getPosition());
-			if (ratio > 1.f / length && ratio < best_ratio) { //FLOAT_COMPARISON
-				intersect = start + direction * ratio;
-				intersect.toGrid(P_micro_grid);
+			int distance = getIntersect(start, end, focus->getStartPoint()->getPosition(), focus->getEndPoint()->getPosition(), temp_intersect);
+			if (distance > 0 && distance < best_distance) {
 				if (!(intersect == start)) {
-					best_ratio = ratio;
+					best_distance = distance;
 					result = 3 + 2 * ii;
+					intersect = temp_intersect;
 				}
 			}
 			focus = focus->getNextEdge();
 		} while (focus != root);
 	}
-
-	intersect = start + direction * best_ratio;
-	intersect.toGrid(P_micro_grid);
 	
 	return result;
 }
@@ -310,10 +301,10 @@ bool F_DCEL::Face::subAllocateFace(const TArray<_P> &border, TArray<Face*> &inte
 	//any point is exterior, interior, or border-intersecting
 	int f_i = 0;
 	const int Num = border.Num();
-	const float area = _P::Area(border);
+	const int area = _P::Area(border);
 
-	if(compare_float(area, 0.f)) {
-	//if (FMath::Abs(area) < FLT_EPSILON) { //FLOAT_COMPARISON
+	if(area == 0) {
+
 		//return nullptr;
 		//undefinded behavior!
 		dad->sanityCheck();
@@ -358,9 +349,6 @@ bool F_DCEL::Face::subAllocateFace(const TArray<_P> &border, TArray<Face*> &inte
 		//test for intersects
 		_P intersect_point;
 		interaction_state intersect_result = getFirstIntersect(focus->point, focus->next->point, intersect_point);
-		//intersect_point.X = FMath::RoundToInt(intersect_point.X * 10) / 10; //GRID ROUNDING
-		//intersect_point.Y = FMath::RoundToInt(intersect_point.Y * 10) / 10; //GRID ROUNDING
-		//intersect_point.toGrid(P_micro_grid);
 
 		if (intersect_result != unknown_region) {
 			UE_LOG(LogTemp, Warning, TEXT("I: intersect at (%f, %f), type %d"), intersect_point.X, intersect_point.Y, intersect_result);
@@ -521,19 +509,20 @@ bool F_DCEL::Face::subAllocateFace(const TArray<_P> &border, TArray<Face*> &inte
 
 				check(focus->state % 2 == 1);
 
-				if (focus->point.Equals(local_a->getEndPoint()->getPosition())) {
+				if (focus->point == local_a->getEndPoint()->getPosition()) {
 					//find appropriate owning edge from root
 					F_DCEL::Edge* rotation_focus = local_a;
-					_P test = last_edge->getEndPoint()->getPosition() - focus->point;
-					test.Normalize();
+					_P test = last_edge->getEndPoint()->getPosition();// -focus->point;
+					//test.Normalize();
 					do {
 						//get the bisector and range
-						_P right = rotation_focus->getStartPoint()->getPosition() - rotation_focus->getEndPoint()->getPosition();
-						_P left = rotation_focus->getNextEdge()->getEndPoint()->getPosition() - rotation_focus->getEndPoint()->getPosition();
-						left.Normalize();
-						right.Normalize();
+						_P center = rotation_focus->getEndPoint()->getPosition();
+						_P right = rotation_focus->getStartPoint()->getPosition();// -rotation_focus->getEndPoint()->getPosition();
+						_P left = rotation_focus->getNextEdge()->getEndPoint()->getPosition();// -rotation_focus->getEndPoint()->getPosition();
+						//left.Normalize();
+						//right.Normalize();
 
-						if (_P::inRegionCW(left, right, test)) {
+						if (_P::inRegionCW(test, right, center, left)){//_P::inRegionCW(left, right, test)) {
 							local_a = rotation_focus;
 							break;
 						}
@@ -585,31 +574,27 @@ bool F_DCEL::Face::subAllocateFace(const TArray<_P> &border, TArray<Face*> &inte
 
 			if (focus->next->state == focus->state) { //is the next point on the same border
 
-				if (!(focus->next->point.Equals(local->getEndPoint()->getPosition()) ||
+				if (!(focus->next->point == local->getEndPoint()->getPosition() ||
 					_P::isOnSegment(focus->next->point, local->getStartPoint()->getPosition(), local->getEndPoint()->getPosition()))) { //is the next point on a different edge
-
-					_P mid = (focus->point + focus->next->point) / 2;
-					auto point_state = getPointState(mid);
-					UE_LOG(LogTemp, Warning, TEXT("L: Testing Mid Point Between (%f, %f)and (%f, %f)."), focus->point.X, focus->point.Y, focus->next->point.X, focus->next->point.Y);
-					UE_LOG(LogTemp, Warning, TEXT("L: Testing Mid Point (%f, %f), type %d, Predicted %d."), mid.X, mid.Y, point_state, focus->mid_state);
 
 					if (focus->mid_state == 2) { //is the mid point of this section interior to the region, or the hole
 
 						mid_strand = true;
 
-						if (focus->point.Equals(local->getStartPoint()->getPosition())) {
+						if (focus->point == local->getStartPoint()->getPosition()) {
 							//find appropriate owning edge from root
 							F_DCEL::Edge* rotation_focus = local;
-							_P test = focus->next->point - focus->point;
-							test.Normalize();
+							_P test = focus->next->point;// -focus->point;
+							//test.Normalize();
 							do {
 								//get the bisector and range
-								_P left = rotation_focus->getEndPoint()->getPosition() - rotation_focus->getStartPoint()->getPosition();
-								_P right = rotation_focus->getLastEdge()->getStartPoint()->getPosition() - rotation_focus->getStartPoint()->getPosition();
-								left.Normalize();
-								right.Normalize();
+								_P center = rotation_focus->getStartPoint()->getPosition();
+								_P left = rotation_focus->getEndPoint()->getPosition();// -rotation_focus->getStartPoint()->getPosition();
+								_P right = rotation_focus->getLastEdge()->getStartPoint()->getPosition();// -rotation_focus->getStartPoint()->getPosition();
+								//left.Normalize();
+								//right.Normalize();
 
-								if (_P::inRegionCW(left, right, test)) {
+								if (_P::inRegionCW(test, right, center, left)) {
 									local = rotation_focus;
 									break;
 								}
@@ -641,19 +626,20 @@ bool F_DCEL::Face::subAllocateFace(const TArray<_P> &border, TArray<Face*> &inte
 
 				mid_strand = true;
 
-				if (focus->point.Equals(local->getStartPoint()->getPosition())) {
+				if (focus->point == local->getStartPoint()->getPosition()) {
 					//find appropriate owning edge from root
 					F_DCEL::Edge* rotation_focus = local;
-					_P test = focus->next->point - focus->point;
-					test.Normalize();
+					_P test = focus->next->point;// -focus->point;
+					//test.Normalize();
 					do {
 						//get the bisector and range
-						_P left = rotation_focus->getEndPoint()->getPosition() - rotation_focus->getStartPoint()->getPosition();
-						_P right = rotation_focus->getLastEdge()->getStartPoint()->getPosition() - rotation_focus->getStartPoint()->getPosition();
-						left.Normalize();
-						right.Normalize();
+						_P center = rotation_focus->getStartPoint()->getPosition();
+						_P left = rotation_focus->getEndPoint()->getPosition();// -rotation_focus->getStartPoint()->getPosition();
+						_P right = rotation_focus->getLastEdge()->getStartPoint()->getPosition();// -rotation_focus->getStartPoint()->getPosition();
+						//left.Normalize();
+						//right.Normalize();
 
-						if (_P::inRegionCW(left, right, test)) {
+						if (_P::inRegionCW(test, right, center, left)) {
 							local = rotation_focus;
 							break;
 						}

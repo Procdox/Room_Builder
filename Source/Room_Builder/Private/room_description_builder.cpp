@@ -22,12 +22,12 @@ enum edge_correction { null_static, null_intersect, null_atvertex, connected_sta
 //========================================= utilities ======================================================
 //==========================================================================================================
 
-#define color_pink FColor(200,0,200)
+#define color_Pnk FColor(200,0,200)
 #define color_red FColor(255,0,0)
 #define color_green FColor(0,255,0)
 #define color_blue FColor(0,0,255)
 
-void Draw_Border(const TArray<FVector2D> &border, float height, const UWorld *ref, FColor color = color_pink) {
+void Draw_Border(const TArray<FVector2D> &border, float height, const UWorld *ref, FColor color = color_Pnk) {
 	float offset = 0;
 	for (int index = 0; index < border.Num(); index++) {
 		int next = (index + 1) % border.Num();
@@ -545,7 +545,7 @@ struct Type_Tracker {
 	void display(const UWorld* world) {
 		for (auto small : Smalls) {
 			small->cleanBorder();
-			Draw_Border(to_FVector(small->getRootEdge()->listPoints()), 70, world, color_pink);
+			Draw_Border(to_FVector(small->getRootEdge()->listPoints()), 70, world, color_Pnk);
 		}
 
 		for (auto room : Rooms) {
@@ -912,7 +912,7 @@ TArray<_P> choosePointsNear(const F_DCEL::Face &target, int count){
 			}
 
 			_P point = A + (AB * t);
-			point.toGrid(P_micro_grid);
+			//point.toGrid(P_micro_grid);
 
 			float score = (point - seed).SizeSquared();
 			if (score < best_score) {
@@ -1223,7 +1223,7 @@ bool createDistributedRooms(Type_Tracker &system_types, const int attempts_per_c
 			do {
 				_P choice = circularUniformPoint(tolerance) + grid;
 				choice *= 100.f;
-				choice.toGrid(100.f);
+				//choice.toGrid(100.f);
 
 				//choice.X = (int)(choice.X) * 100.f;
 				//choice.Y = (int)(choice.Y) * 100.f;
@@ -1245,7 +1245,7 @@ bool fillNullSpace(Type_Tracker &system_types, int safety = 100, int scale = 1, 
 	while (system_types.Nulls.Num() > 0 && (safety--) > 0) {
 		auto bounds = getBounds(system_types.Nulls[0]);
 		auto choice = boxUniformPoint(bounds);
-		choice.toGrid(100.f);
+		//choice.toGrid(100.f);
 		createRoomAtPoint(system_types, choice, scale, created);
 	}
 	return true;
@@ -1292,7 +1292,7 @@ void create_Layout(Type_Tracker &system_types, int large, int medium, int small)
 	for (int ii = 0; ii < large; ii++) {
 		//pick point
 		auto point = circularUniformPoint(800);
-		point.toGrid(P_micro_grid);
+		//point.toGrid(P_micro_grid);
 		Fcc temp_created;
 		if (createRoomAtPoint(system_types, point, FMath::RandRange(10, 14), &temp_created)) {
 			for (auto room : temp_created) {
