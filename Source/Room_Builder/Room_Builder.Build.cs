@@ -105,14 +105,14 @@ public class Room_Builder : ModuleRules
             isLibrarySupported = true;
 
             string PlatformString = (Target.Platform == UnrealTargetPlatform.Win64) ? "x64" : "x86";
-            string LibrariesPath = Path.Combine(ThirdPartyPath, "DCEL", "Libraries");
+            string LibrariesPath = Path.Combine(ThirdPartyPath, "DCEL_CUTS", "Libraries");
 
-            PublicAdditionalLibraries.Add(Path.Combine(LibrariesPath, "DCEL." + PlatformString + ".lib"));
+            PublicAdditionalLibraries.Add(Path.Combine(LibrariesPath, "DCEL_CUTS." + PlatformString + ".lib"));
         }
 
         if (isLibrarySupported)
         {
-            PublicIncludePaths.Add(Path.Combine(ThirdPartyPath, "DCEL", "Includes"));
+            PublicIncludePaths.Add(Path.Combine(ThirdPartyPath, "DCEL_CUTS", "Includes"));
         }
 
         Definitions.Add(string.Format("WITH_DCEL_LIB_BINDING={0}", isLibrarySupported ? 1 : 0));

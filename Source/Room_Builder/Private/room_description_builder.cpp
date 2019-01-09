@@ -4,19 +4,28 @@
 #include "Algo/Reverse.h"
 #include "DrawDebugHelpers.h"
 
+#define room_min_width 30
+#define hall_min_width 20
 
-enum edge_correction { null_static, null_intersect, null_atvertex, connected_static, connected_intersect, connected_atvertex };
+//==========================================================================================================
+//========================================== transforms ====================================================
+//==========================================================================================================
 
+FVector2D convert(Pint const &target) {
+	return FVector2D(target.X.toFloat(), target.Y.toFloat());
+}
 
-//find the order of the set of edges st:
-//	for an edge
-//		base_vertex.y != end_vertex.y
-//		contain a point [x,y] 
-//			in their [base_vertex, end_vertex) range where 
-//				X is greater than test_point.x
-//				y = test_point.y
-//an odd parity implies the point is interior
-//an even parity implites
+ClipperLib::Path toPath(FLL<Pint> const &target) {
+
+}
+
+FLL<Pint> fromPath(ClipperLib::Path const &target) {
+
+}
+
+TArray<FVector2D> toFVector(FLL<Pint> const &target) {
+
+}
 
 //==========================================================================================================
 //========================================= utilities ======================================================
@@ -34,43 +43,53 @@ void Draw_Border(const TArray<FVector2D> &border, float height, const UWorld *re
 
 		DrawDebugLine(
 			ref,
-			FVector(border[index], height + offset * 5),
-			FVector(border[next], height + offset * 5),
+			FVector(border[index]*10, height + offset * 5),
+			FVector(border[next]*10, height + offset * 5),
 			//FColor(FMath::RandRange(0,255), FMath::RandRange(0, 255), FMath::RandRange(0, 255)),
 			color,
 			true,
 			-1,
 			0,
-			10
+			7
 		);
 		//offset++;
 	}
 }
 
-_P circularUniformPoint(float radius = 1.f) {
+
+Pint circularUniformPoint(rto radius = 1, int divisions = 100) {
 	float t = 2 * PI*FMath::RandRange(0.f, 1.f);
 	float u = FMath::RandRange(0.f, 1.f) + FMath::RandRange(0.f, 1.f);
 	float r = u;
 	if (u > 1)
 		r = 2 - u;
-	r *= radius;
-	return _P(r*cos(t), r*sin(t));
+	r *= divisions;
+	return Pint(r*cos(t),r*sin(t)) * radius / divisions;
+
 }
-_P boxUniformPoint(float width = 1.f, float height = 1.f) {
-	return _P(FMath::RandRange(0.f, width), FMath::RandRange(0.f, height));
+Pint boxUniformPoint(rto width = 10, rto height = 10, int divisions = 100) {
+	return Pint(width * (int)FMath::RandRange(0, divisions), height * (int)FMath::RandRange(0, divisions)) / divisions;
 }
-_P boxUniformPoint(const FBox2D &box) {
-	return _P(FMath::RandRange(box.Min.X, box.Max.X), FMath::RandRange(box.Min.Y, box.Min.Y));
+Pint boxUniformPoint(PBox const & box, int divisions = 100) {
+	int X = (int)FMath::RandRange(-divisions, divisions);
+	int Y = (int)FMath::RandRange(-divisions, divisions);
+
+	return Pint(X, Y) * box.getExtent() + box.getCenter();
 }
 
-FBox2D getBounds(const F_DCEL::Face* target) {
-	FBox2D result;
-	auto boundary = target->getRootEdge()->listPoints();
-	result.Max.X = boundary[0].X;
-	result.Max.Y = boundary[0].Y;
+PBox getBounds(Face<Pint> const * target) {
+	PBox result;
+
+	auto boundary = target->getLoopPoints();
+
+	auto focus = boundary.last();
+
+	result.Max.X = focus.X;
+	result.Max.Y = focus.Y;
+
 	result.Min = result.Max;
 
-	for (auto point : boundary) {
+	for(auto point : boundary) {
 		result.Min.X = FMath::Min(result.Min.X, point.X);
 		result.Min.Y = FMath::Min(result.Min.Y, point.Y);
 		result.Max.X = FMath::Max(result.Max.X, point.X);
@@ -80,249 +99,171 @@ FBox2D getBounds(const F_DCEL::Face* target) {
 	return result;
 }
 
-
 //==========================================================================================================
-//======================================= array transforms =================================================
+//=================================== polytree utilities ================================================
 //==========================================================================================================
 
-#define Clipper_Scale grid_coef
-#define room_min_width 280 * Clipper_Scale
-#define hall_min_width 180 * Clipper_Scale
-#define Fcc TArray<F_DCEL::Face*>
+namespace polytree_utils
+{
+	using namespace ClipperLib;
 
+	void AllocateNode(PolyNode * ref, FLL<Region *> targets, FLL<Region *> &ins, FLL<Region *> &outs) {
 
+		auto contour = fromPath(ref->Contour);
 
-ClipperLib::Path to_Path(const TArray<FVector2D> &source) {
-	ClipperLib::Path result;
+		FLL<Region *> relative_outs;
+		FLL<Region *> relative_ins;
 
-	for (auto& vector : source) {
-		result.push_back(ClipperLib::IntPoint(vector.X * Clipper_Scale, vector.Y * Clipper_Scale));
-	}
-
-	return result;
-};
-ClipperLib::Path to_Path(const TArray<_P> &source) {
-	ClipperLib::Path result;
-
-	for (auto& vector : source) {
-		result.push_back(ClipperLib::IntPoint(vector.X * Clipper_Scale, vector.Y * Clipper_Scale));
-	}
-
-	return result;
-};
-
-ClipperLib::Paths to_Paths(const F_DCEL::Face* source) {
-	ClipperLib::Paths result;
-	result.push_back(to_Path(source->getRootEdge()->listPoints()));
-
-	int holes = source->getHoleCount();
-
-	for (int kk = 0; kk < holes; kk++) {
-		result.push_back(to_Path(source->getHole(kk)->listPoints()));
-	}
-
-	return result;
-};
-
-TArray<FVector2D> to_FVector(const ClipperLib::Path &source) {
-	TArray<FVector2D> result;
-
-	for (auto& point : source) {
-		result.Push(FVector2D(point.X / Clipper_Scale, point.Y / Clipper_Scale));
-	}
-
-	return result;
-};
-TArray<FVector2D> to_FVector(const TArray<_P> &source) {
-	TArray<FVector2D> result;
-
-	for (auto& vector : source) {
-		result.Push(FVector2D(vector.X, vector.Y));
-	}
-
-	return result;
-}
-
-TArray<_P> to_Primitive(const ClipperLib::Path &source) {
-	TArray<_P> result;
-
-	for (auto& vector : source) {
-		result.Push(_P(vector.X / Clipper_Scale, vector.Y / Clipper_Scale));
-	}
-
-	return result;
-}
-
-//methods for transforming a PolyTree into a DCEL
-void AllocateNode(const ClipperLib::PolyNode &ref, F_DCEL::Face* target, Fcc &ins, Fcc &outs) {
-	//the poly tree structure guarantees non first order children won't touch edges, making recursive calculation simple
-	Fcc created_ins;
-	Fcc created_outs;
-
-	if (target->subAllocateFace(to_Primitive(ref.Contour), created_ins, created_outs)) {
-		for (auto node : ref.Childs) {
-			AllocateNode(*node, created_ins[0], ins, outs);
+		for (auto target : targets) {
+			subAllocate(target, contour, relative_ins, relative_outs);
 		}
 
-		if (ref.IsHole()) {
-			outs.Append(created_ins);
+		for (auto outer : ref->Childs) {
+			FLL<Region *> novel_ins;
+
+			AllocateNode(outer, relative_ins, outs, novel_ins);
+
+			relative_ins.clear();
+			relative_ins.absorb(novel_ins);
 		}
-		else {
-			ins.Append(created_ins);
-		}
-	}
-}
-void AllocateTree(ClipperLib::PolyTree &ref, F_DCEL::Face* target, Fcc &ins, Fcc &outs) {
-	//first order children may touch edges, meaning reconsideration of target is nessecary
-	Fcc relevants;
 
-	relevants.Push(target);
-
-	for (auto node : ref.Childs) {
-		UE_LOG(LogTemp, Warning, TEXT("---NODE---"));
-		Fcc created_ins;
-		Fcc created_outs;
-		for (int ii = 0; ii < relevants.Num(); ii++) {
-			UE_LOG(LogTemp, Warning, TEXT("----RELEVANT----"));
-			if (relevants[ii]->subAllocateFace(to_Primitive(node->Contour), created_ins, created_outs)) {
-				relevants.RemoveAt(ii--);
-				relevants.Append(created_outs);
-				ins.Append(created_ins);
-
-				for (auto child : node->Childs) {
-					AllocateNode(*child, created_ins[0], ins, outs);
-				}
-
-				break;
-			}
-		}
+		ins.absorb(relative_ins);
 	}
 
-	outs.Append(relevants);
-}
-void AllocateTree(ClipperLib::PolyTree &ref, Fcc &targets, Fcc &ins, Fcc &outs) {
-	for (auto target : targets) {
-		UE_LOG(LogTemp, Warning, TEXT("--TARGET--"));
-		AllocateTree(ref, target, ins, outs);
+	void AllocateTree(PolyTree & ref, FLL<Region *> targets, FLL<Region *> &ins, FLL<Region *> &outs) {
+
+		for (auto outer : ref.Childs) {
+			FLL<Region *> novel_outs;
+
+			AllocateNode(outer, targets, ins, novel_outs);
+
+			targets.clear();
+			targets.absorb(novel_outs);
+		}
+
+		outs.absorb(targets);
 	}
 }
-
 
 //==========================================================================================================
 //=================================== triangulate utilities ================================================
 //==========================================================================================================
 
-bool TryIntersect(const FVector2D &A_S, const FVector2D &A_E, const FVector2D &B_S, const FVector2D &B_E) {
-	double ua, ub, denom;
-	denom = (B_E.Y - B_S.Y)*(A_E.X - A_S.X) - (B_E.X - B_S.X)*(A_E.Y - A_S.Y);
-	if (denom == 0) {
-		return false;
+namespace tri_utils
+{
+	bool TryIntersect(const FVector2D &A_S, const FVector2D &A_E, const FVector2D &B_S, const FVector2D &B_E) {
+		double ua, ub, denom;
+		denom = (B_E.Y - B_S.Y)*(A_E.X - A_S.X) - (B_E.X - B_S.X)*(A_E.Y - A_S.Y);
+		if (denom == 0) {
+			return false;
+		}
+		ua = ((B_E.X - B_S.X)*(A_S.Y - B_S.Y) - (B_E.Y - B_S.Y)*(A_S.X - B_S.X)) / denom;
+		ub = ((A_E.X - A_S.X)*(A_S.Y - B_S.Y) - (A_E.Y - A_S.Y)*(A_S.X - B_S.X)) / denom;
+
+		return (ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1);
 	}
-	ua = ((B_E.X - B_S.X)*(A_S.Y - B_S.Y) - (B_E.Y - B_S.Y)*(A_S.X - B_S.X)) / denom;
-	ub = ((A_E.X - A_S.X)*(A_S.Y - B_S.Y) - (A_E.Y - A_S.Y)*(A_S.X - B_S.X)) / denom;
+	bool IsConcave(const FVector2D &A, const FVector2D &B, const FVector2D &C) {
+		FVector2D In = B - A;
+		FVector2D Out = C - B;
+		FVector2D OutCCW(-Out.Y, Out.X);
 
-	return (ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1);
-}
-bool IsConcave(const FVector2D &A, const FVector2D &B, const FVector2D &C) {
-	FVector2D In = B - A;
-	FVector2D Out = C - B;
-	FVector2D OutCCW(-Out.Y, Out.X);
-
-	return (FVector2D::DotProduct(In, OutCCW)<0);
-}
-template <class T>
-TArray<T> Reverse_Copy_Buffer(const TArray<T> &Buffer) {
-	const int32 size = Buffer.Num();
-
-	TArray<T> product;
-	product.SetNum(size);
-
-	for (int32 ii = 0; ii < size; ii++) {
-		product[size - ii - 1] = Buffer[ii];
+		return (FVector2D::DotProduct(In, OutCCW)<0);
 	}
 
-	return product;
-}
+	template <class T>
+	TArray<T> Reverse(const TArray<T> &Buffer) {
+		const int32 size = Buffer.Num();
 
-TArray<int32> Triangulate_Sequence(const TArray<FVector2D> &VectorBuffer, TArray<int32> &IndexBuffer) {
-	/*  triangulate via ear clipping  */
-	/*  requires intersect and concavity check  */
-	TArray<int32> Triangles;
-	int32 frozen = 0;
-	{
-		int32 tri_A = 0;
-		int32 tri_B, tri_C, segment_start_index, segment_end_index;
-		bool success = false;
+		TArray<T> product;
+		product.SetNum(size);
 
-		while (IndexBuffer.Num() > 2) {
-			tri_B = (tri_A + 1) % IndexBuffer.Num();
-			tri_C = (tri_A + 2) % IndexBuffer.Num();
-			segment_start_index = IndexBuffer[tri_A];
-			segment_end_index = IndexBuffer[tri_C];
-			success = true;
+		for (int32 ii = 0; ii < size; ii++) {
+			product[size - ii - 1] = Buffer[ii];
+		}
 
-			//is an ear?
-			if (!IsConcave(VectorBuffer[segment_start_index], VectorBuffer[IndexBuffer[tri_B]], VectorBuffer[segment_end_index])) {
-				success = false;
-			}
-			else {
-				//preserves planarity?
-				for (int32 index_ex = 0; index_ex < IndexBuffer.Num(); index_ex++) {
-					int32 test_start_index = IndexBuffer[index_ex];
-					int32 test_end_index = IndexBuffer[(index_ex + 1) % (IndexBuffer.Num())];
+		return product;
+	}
 
-					if (test_start_index == segment_start_index ||
-						test_end_index == segment_start_index ||
-						test_end_index == segment_end_index ||
-						test_start_index == segment_end_index) {
-						continue;
+	TArray<int32> Triangulate(const TArray<FVector2D> &VectorBuffer, TArray<int32> &IndexBuffer) {
+		/*  triangulate via ear clipping  */
+		/*  requires intersect and concavity check  */
+		TArray<int32> Triangles;
+		int32 frozen = 0;
+		{
+			int32 tri_A = 0;
+			int32 tri_B, tri_C, segment_start_index, segment_end_index;
+			bool success = false;
+
+			while (IndexBuffer.Num() > 2) {
+				tri_B = (tri_A + 1) % IndexBuffer.Num();
+				tri_C = (tri_A + 2) % IndexBuffer.Num();
+				segment_start_index = IndexBuffer[tri_A];
+				segment_end_index = IndexBuffer[tri_C];
+				success = true;
+
+				//is an ear?
+				if (!IsConcave(VectorBuffer[segment_start_index], VectorBuffer[IndexBuffer[tri_B]], VectorBuffer[segment_end_index])) {
+					success = false;
+				}
+				else {
+					//preserves planarity?
+					for (int32 index_ex = 0; index_ex < IndexBuffer.Num(); index_ex++) {
+						int32 test_start_index = IndexBuffer[index_ex];
+						int32 test_end_index = IndexBuffer[(index_ex + 1) % (IndexBuffer.Num())];
+
+						if (test_start_index == segment_start_index ||
+							test_end_index == segment_start_index ||
+							test_end_index == segment_end_index ||
+							test_start_index == segment_end_index) {
+							continue;
+						}
+
+						if (TryIntersect(VectorBuffer[segment_start_index], VectorBuffer[segment_end_index],
+							VectorBuffer[test_start_index], VectorBuffer[test_end_index])) {
+
+							success = false;
+							break;
+						}
+
 					}
+				}
 
-					if (TryIntersect(VectorBuffer[segment_start_index], VectorBuffer[segment_end_index],
-						VectorBuffer[test_start_index], VectorBuffer[test_end_index])) {
+				if (success) {
 
-						success = false;
+					//remove point
+					Triangles.Add(IndexBuffer[tri_A]);
+					Triangles.Add(IndexBuffer[tri_B]);
+					Triangles.Add(IndexBuffer[tri_C]);
+
+					IndexBuffer.RemoveAt(tri_B);
+
+					tri_A = tri_A - 1;
+					if (tri_A < 0) {
+						tri_A = IndexBuffer.Num() - 1;
+					}
+					frozen = 0;
+				}
+				else {
+					tri_A = (tri_A + 1) % IndexBuffer.Num();
+					frozen++;
+					if (frozen > IndexBuffer.Num()) {
+						//if (GEngine)
+						//	GEngine->AddOnScreenDebugMessage(-1, 15.0f, FColor::Yellow, TEXT("Failed to Triangulate destructible mesh!"));
 						break;
 					}
-
-				}
-			}
-
-			if (success) {
-
-				//remove point
-				Triangles.Add(IndexBuffer[tri_A]);
-				Triangles.Add(IndexBuffer[tri_B]);
-				Triangles.Add(IndexBuffer[tri_C]);
-
-				IndexBuffer.RemoveAt(tri_B);
-
-				tri_A = tri_A - 1;
-				if (tri_A < 0) {
-					tri_A = IndexBuffer.Num() - 1;
-				}
-				frozen = 0;
-			}
-			else {
-				tri_A = (tri_A + 1) % IndexBuffer.Num();
-				frozen++;
-				if (frozen > IndexBuffer.Num()) {
-					//if (GEngine)
-					//	GEngine->AddOnScreenDebugMessage(-1, 15.0f, FColor::Yellow, TEXT("Failed to Triangulate destructible mesh!"));
-					break;
 				}
 			}
 		}
+		return Triangles;
 	}
-	return Triangles;
-}
 
+}
 
 //==========================================================================================================
 //======================================== creation ========================================================
 //==========================================================================================================
 
-void Aroom_description_builder::CreateDoor(const FVector2D &wall_left, const FVector2D &wall_right, float Bottom, float Top) {
+void Aroom_description_builder::CreateDoor(Pint const & wall_left, Pint const & wall_right, float bottom, float top) {
 	UProceduralMeshComponent* Wall_Mesh = NewObject<UProceduralMeshComponent>();
 	Wall_Mesh->AttachToComponent(root, FAttachmentTransformRules::KeepRelativeTransform);
 	Wall_Mesh->ContainsPhysicsTriMeshData(true);
@@ -335,21 +276,21 @@ void Aroom_description_builder::CreateDoor(const FVector2D &wall_left, const FVe
 	TArray<FProcMeshTangent> Tangents;
 	TArray<FLinearColor> VertexColors;
 
-	FVector2D Mid = (wall_left + wall_right) / 2;
-	FVector2D dir = wall_left - wall_right;
+	FVector2D Mid = convert((wall_left + wall_right) / 2);
+	FVector2D dir = convert(wall_left - wall_right);
 	dir.Normalize();
 	dir *= 30;//door radial width
 	FVector2D doorframe_left = Mid + dir;
 	FVector2D doorframe_right = Mid - dir;
 
-	Vertices.Push(FVector(wall_left, Bottom));
-	Vertices.Push(FVector(wall_left, Top));
-	Vertices.Push(FVector(doorframe_left, Bottom));
-	Vertices.Push(FVector(doorframe_left, Top));
-	Vertices.Push(FVector(doorframe_right, Bottom));
-	Vertices.Push(FVector(doorframe_right, Top));
-	Vertices.Push(FVector(wall_right, Bottom));
-	Vertices.Push(FVector(wall_right, Top));
+	Vertices.Push(FVector(convert(wall_left), bottom));
+	Vertices.Push(FVector(convert(wall_left), top));
+	Vertices.Push(FVector(doorframe_left, bottom));
+	Vertices.Push(FVector(doorframe_left, top));
+	Vertices.Push(FVector(doorframe_right, bottom));
+	Vertices.Push(FVector(doorframe_right, top));
+	Vertices.Push(FVector(convert(wall_right), bottom));
+	Vertices.Push(FVector(convert(wall_right), top));
 
 	Triangles.Push(7);
 	Triangles.Push(5);
@@ -375,14 +316,14 @@ void Aroom_description_builder::CreateDoor(const FVector2D &wall_left, const FVe
 	Normals.Push(FVector(normal, 0));
 	Normals.Push(FVector(normal, 0));
 
-	UV0.Push(FVector2D(0, Bottom));
-	UV0.Push(FVector2D(0, Top));
-	UV0.Push(FVector2D(1, Bottom));
-	UV0.Push(FVector2D(1, Top));
-	UV0.Push(FVector2D(0, Bottom));
-	UV0.Push(FVector2D(0, Top));
-	UV0.Push(FVector2D(1, Bottom));
-	UV0.Push(FVector2D(1, Top));
+	UV0.Push(FVector2D(0, bottom));
+	UV0.Push(FVector2D(0, top));
+	UV0.Push(FVector2D(1, bottom));
+	UV0.Push(FVector2D(1, top));
+	UV0.Push(FVector2D(0, bottom));
+	UV0.Push(FVector2D(0, top));
+	UV0.Push(FVector2D(1, bottom));
+	UV0.Push(FVector2D(1, top));
 
 	Tangents.Push(FProcMeshTangent(0, 0, 1));
 	Tangents.Push(FProcMeshTangent(0, 0, 1));
@@ -407,9 +348,9 @@ void Aroom_description_builder::CreateDoor(const FVector2D &wall_left, const FVe
 
 
 	const float door_height = 110;
-	if (Top - Bottom >= door_height) {
-		Vertices.Push(FVector(doorframe_left, Bottom + door_height));
-		Vertices.Push(FVector(doorframe_right, Bottom + door_height));
+	if (top - bottom >= door_height) {
+		Vertices.Push(FVector(doorframe_left, bottom + door_height));
+		Vertices.Push(FVector(doorframe_right, bottom + door_height));
 
 		Triangles.Push(5);
 		Triangles.Push(3);
@@ -421,7 +362,7 @@ void Aroom_description_builder::CreateDoor(const FVector2D &wall_left, const FVe
 		Normals.Push(FVector(normal, 0));
 		Normals.Push(FVector(normal, 0));
 
-		float uv_ratio = door_height / (Top - Bottom);
+		float uv_ratio = door_height / (top - bottom);
 		UV0.Push(FVector2D(0, uv_ratio));
 		UV0.Push(FVector2D(1, uv_ratio));
 
@@ -439,15 +380,16 @@ void Aroom_description_builder::CreateDoor(const FVector2D &wall_left, const FVe
 
 	Wall_Mesh->RegisterComponentWithWorld(GetWorld());
 }
-void Aroom_description_builder::Create_Floor_Ceiling_New(const F_DCEL::Face* source, float Bottom, float Top) {
-	auto Border = to_FVector(source->getRootEdge()->listPoints());
+void Aroom_description_builder::Create_Floor_Ceiling_New(Region const & source, float bottom, float top) {
+	auto Border = toFVector(source.getBounds()->last()->getLoopPoints());
+
 	TArray<int32> Index_Faked;
 	Index_Faked.SetNum(Border.Num());
 	for (int32 ii = 0; ii < Border.Num(); ii++) {
 		Index_Faked[ii] = ii;
 	}
-	TArray<int32> Triangles_top = Triangulate_Sequence(Border, Index_Faked);
-	TArray<int32> Triangles_bottom = Reverse_Copy_Buffer(Triangles_top);
+	TArray<int32> Triangles_top = tri_utils::Triangulate(Border, Index_Faked);
+	TArray<int32> Triangles_bottom = tri_utils::Reverse(Triangles_top);
 
 	UProceduralMeshComponent* Floor_Mesh = NewObject<UProceduralMeshComponent>();
 	Floor_Mesh->AttachToComponent(root, FAttachmentTransformRules::KeepRelativeTransform);
@@ -466,8 +408,8 @@ void Aroom_description_builder::Create_Floor_Ceiling_New(const F_DCEL::Face* sou
 	TArray<FLinearColor> vertexColors_top;
 
 	for (auto& vector : Border) {
-		vertices_bottom.Add(FVector(vector.X, vector.Y, Bottom));
-		vertices_top.Add(FVector(vector.X, vector.Y, Top));
+		vertices_bottom.Add(FVector(vector.X, vector.Y, bottom));
+		vertices_top.Add(FVector(vector.X, vector.Y, top));
 		normals_bottom.Add(FVector(0, 0, 1));
 		normals_top.Add(FVector(0, 0, -1));
 		UV0_bottom.Add(vector / 10);
@@ -484,42 +426,21 @@ void Aroom_description_builder::Create_Floor_Ceiling_New(const F_DCEL::Face* sou
 	Floor_Mesh->RegisterComponentWithWorld(GetWorld());
 
 }
-void Aroom_description_builder::Create_Wall_Sections_New(const F_DCEL::Face* source, float Bottom, float Top, int &h) {
-	{
-		auto Border = to_FVector(source->getRootEdge()->listPoints());
-		//Draw_Border(Border, Top, GetWorld());
-		TArray<FVector2D> Wall_Sections;
-		Wall_Sections.Push(Border[0]);
-		for (int ii = 1; ii < Border.Num(); ii++) {
-			Wall_Sections.Push(Border[ii]);
-			Wall_Sections.Push(Border[ii]);
-		}
-		Wall_Sections.Push(Border[0]);
+void Aroom_description_builder::Create_Wall_Sections_New(Region const & source, float bottom, float top) {
 
-		const int32 size = Wall_Sections.Num() / 2;
-		for (int32 ii = 0; ii < size; ii++) {
-			int32 a = ii * 2;
+	for(auto border : source.getBounds()) {
+		auto border_points = border->getValue()->getLoopPoints();
 
-			CreateDoor(Wall_Sections[a + 1], Wall_Sections[a], Bottom, Top);
-		}
-	}
-	for(int ii = 0; ii < source->getHoleCount(); ii++){
+		Draw_Border(toFVector(border_points), 50, GetWorld());
 
-		auto Border = to_FVector(source->getHole(ii)->listPoints());
-		//Draw_Border(Border, Top, GetWorld());
-		TArray<FVector2D> Wall_Sections;
-		Wall_Sections.Push(Border[0]);
-		for (int ii = 1; ii < Border.Num(); ii++) {
-			Wall_Sections.Push(Border[ii]);
-			Wall_Sections.Push(Border[ii]);
-		}
-		Wall_Sections.Push(Border[0]);
 
-		const int32 size = Wall_Sections.Num() / 2;
-		for (int32 ii = 0; ii < size; ii++) {
-			int32 a = ii * 2;
+		auto last = border_points.last();
 
-			CreateDoor(Wall_Sections[a + 1], Wall_Sections[a], Bottom, Top);
+		for (auto next : border_points) {
+
+			CreateDoor(last->getValue(), next->getValue(), bottom, top);
+
+			last = next;
 		}
 	}
 }
@@ -530,11 +451,11 @@ void Aroom_description_builder::Create_Wall_Sections_New(const F_DCEL::Face* sou
 //==========================================================================================================
 
 struct Type_Tracker {
-	Fcc Nulls;
-	Fcc Rooms;
-	Fcc Halls;
-	Fcc Smalls;
-	bool isRoom(const F_DCEL::Face* target) {
+	FLL<Region *> Nulls;
+	FLL<Region *> Rooms;
+	FLL<Region *> Halls;
+	FLL<Region *> Smalls;
+	bool isRoom(Region const * target) {
 		for (auto room : Rooms) {
 			if (room == target) {
 				return true;
@@ -543,26 +464,31 @@ struct Type_Tracker {
 		return false;
 	}
 	void display(const UWorld* world) {
+		int p = 0;
 		for (auto small : Smalls) {
 			small->cleanBorder();
-			Draw_Border(to_FVector(small->getRootEdge()->listPoints()), 70, world, color_Pnk);
+			for(auto border : small->getBounds())
+				Draw_Border(toFVector(border->getLoopPoints()), 72, world, color_Pnk);
 		}
 
 		for (auto room : Rooms) {
 			room->cleanBorder();
 			//Create_Floor_Ceiling_New(room, 0, 200);
 			//Create_Wall_Sections_New(room, 0, 200, h);
-			Draw_Border(to_FVector(room->getRootEdge()->listPoints()), 80, world, color_blue);
+			for (auto border : small->getBounds())
+				Draw_Border(toFVector(border->getLoopPoints()), 70, world, color_blue);
 		}
 
 		for (auto null : Nulls) {
 			null->cleanBorder();
-			Draw_Border(to_FVector(null->getRootEdge()->listPoints()), 65, world, color_red);
+			for (auto border : small->getBounds())
+				Draw_Border(toFVector(border->getLoopPoints()), 65, world, color_red);
 		}
 
 		for (auto hall : Halls) {
 			hall->cleanBorder();
-			Draw_Border(to_FVector(hall->getRootEdge()->listPoints()), 75, world, color_green);
+			for (auto border : small->getBounds())
+				Draw_Border(toFVector(border->getLoopPoints()), 74, world, color_green);
 		}
 	}
 	//void Safety() {
@@ -572,11 +498,12 @@ struct Type_Tracker {
 	//}
 };
 
-bool Cull_Suggested(F_DCEL::Face* target, Fcc &results, Fcc &nulls) {
+bool Cull_Suggested(Face<Pint>* target, FLL<Face<Pint> *> &results, FLL<Face<Pint> *> &nulls) {
+	UE_LOG(LogTemp, Warning, TEXT("Culling\n"));
 
 	ClipperLib::Paths reduced;
-	Fcc rooms;
-	Fcc outers;
+	FLL<Face<Pint> *> rooms;
+	FLL<Face<Pint> *> outers;
 
 	{
 
@@ -597,7 +524,7 @@ bool Cull_Suggested(F_DCEL::Face* target, Fcc &results, Fcc &nulls) {
 
 	//IF THE ROOM HAS ANY HOLES WE'RE FUCKED
 	for (auto section : reduced) {
-		Fcc created_outers;
+		FLL<Face<Pint> *> created_outers;
 
 		ClipperLib::PolyTree rooms_tree;
 		ClipperLib::ClipperOffset clipper_expander;
@@ -621,30 +548,35 @@ bool Cull_Suggested(F_DCEL::Face* target, Fcc &results, Fcc &nulls) {
 	return true;
 }
 
-void mergeGroup(Fcc &nulls) {
-	for (int ii = 0; ii < nulls.Num(); ii++) {
-		for (int jj = ii + 1; jj < nulls.Num(); jj++) {
-			if (nulls[ii]->mergeWithFace(nulls[jj])) {
-				nulls.RemoveAt(jj);
-				jj = ii;
-			}
+void mergeGroup(FLL<Region *> &nulls) {
+	UE_LOG(LogTemp, Warning, TEXT("Merging Group\n"));
+	for (auto focus = nulls.begin(); focus != nulls.end(); ++focus) {
+		for (auto compare = focus.next(); focus != nulls.end();) {
+			auto v = *compare;
+
+			++compare;
+
+			focus->merge(v);
+			nulls.remove(v);
 		}
 	}
 }
 
 void cleanNulls(Type_Tracker &target) {
-	Fcc input_nulls;
-	input_nulls.Append(target.Nulls);
-	input_nulls.Append(target.Halls);
+	UE_LOG(LogTemp, Warning, TEXT("Clean Nulls\n"));
+
+	FLL<Region *> input_nulls;
+	input_nulls.absorb(target.Nulls);
+	input_nulls.absorb(target.Halls);
 	//input_nulls.Append(target.Smalls);
 	mergeGroup(input_nulls);
 
-	Fcc cleaned_nulls;
-	Fcc pruned_halls;
-	Fcc pruned_smalls;
+	FLL<Region *> cleaned_nulls;
+	FLL<Region *> pruned_halls;
+	FLL<Region *> pruned_smalls;
 
-	for (int ii = 0; ii < input_nulls.Num(); ii++) {
-		ClipperLib::Paths source = to_Paths(input_nulls[ii]);
+	for (auto focus : input_nulls) {
+		ClipperLib::Paths source = to_Paths(focus);
 		ClipperLib::Paths room_ready;
 		{
 			ClipperLib::Paths reduced;
@@ -711,27 +643,27 @@ void cleanNulls(Type_Tracker &target) {
 			clipper_hall.Execute(ClipperLib::ctUnion, hall_tree);
 		}
 
-		Fcc room_ins;
-		Fcc room_outs;
-		Fcc hall_ins;
-		Fcc hall_outs;
-		Fcc debug_ins;
-		Fcc debug_outs;
+		FLL<Region *> room_ins;
+		FLL<Region *> room_outs;
+		FLL<Region *> hall_ins;
+		FLL<Region *> hall_outs;
+		FLL<Region *> debug_ins;
+		FLL<Region *> debug_outs;
 
-		TArray<_P> debug_input = input_nulls[ii]->getRootEdge()->listPoints();
-		TArray<TArray<_P>> debug_room_ins;
-		TArray<TArray<_P>> debug_room_outs;
-		TArray<TArray<_P>> debug_hall_ins;
-		TArray<TArray<_P>> debug_hall_outs;
-		TArray<TArray<_P>> debug_debug_ins;
-		TArray<TArray<_P>> debug_debug_outs;
+		FLL<Pint> debug_input = focus->getRootEdge()->listPoints();
+		TArray<TArray<Pint>> debug_room_ins;
+		TArray<TArray<Pint>> debug_room_outs;
+		TArray<TArray<Pint>> debug_hall_ins;
+		TArray<TArray<Pint>> debug_hall_outs;
+		TArray<TArray<Pint>> debug_debug_ins;
+		TArray<TArray<Pint>> debug_debug_outs;
 
 		UE_LOG(LogTemp, Warning, TEXT(""));
 		UE_LOG(LogTemp, Warning, TEXT("ALLOCATE ROOMS"));
 		UE_LOG(LogTemp, Warning, TEXT(""));
 
 
-		AllocateTree(room_tree, input_nulls[ii], room_ins, room_outs);
+		AllocateTree(room_tree, focus, room_ins, room_outs);
 
 		for (auto room : room_ins) {
 			debug_room_ins.Push(room->getRootEdge()->listPoints());
@@ -755,7 +687,7 @@ void cleanNulls(Type_Tracker &target) {
 		
 		if (hall_ins.Num() != hall_tree.ChildCount()) {
 			F_DCEL system_debug;
-			F_DCEL::Face* inner = system_debug.createFace(debug_input);
+			Face<Pint>* inner = system_debug.createFace(debug_input);
 
 			UE_LOG(LogTemp, Warning, TEXT(""));
 			UE_LOG(LogTemp, Warning, TEXT("ALLOCATE DEBUG"));
@@ -775,19 +707,20 @@ void cleanNulls(Type_Tracker &target) {
 		//check(hall_ins.Num() == hall_tree.ChildCount());
 
 		for (auto null : room_ins) {
-			cleaned_nulls.Push(null);
+			cleaned_nulls.append(null);
 		}
 		for (auto null : hall_ins) {
-			pruned_halls.Push(null);
+			pruned_halls.append(null);
 		}
 		for (auto null : hall_outs) {
-			pruned_smalls.Push(null);
+			pruned_smalls.append(null);
 		}
 	}
 
-	target.Nulls = cleaned_nulls;
-	target.Halls = pruned_halls;
-	target.Smalls.Append(pruned_smalls);
+	target.Nulls.absorb(cleaned_nulls);
+	target.Halls.absorb(pruned_halls);
+	target.Smalls.absorb(pruned_smalls);
+
 	mergeGroup(target.Smalls);
 
 	//mergeGroup(target.Nulls);
@@ -797,6 +730,7 @@ void cleanNulls(Type_Tracker &target) {
 //allocates a region randomly from the provided nulls, listing interior faces
 
 void mergeSmalls(Type_Tracker &target) {
+	UE_LOG(LogTemp, Warning, TEXT("Merge Smalls\n"));
 	//for each small
 	//for connected room
 	//union the borders, reduce, and intersect with small
@@ -806,7 +740,7 @@ void mergeSmalls(Type_Tracker &target) {
 		
 		auto neighbors = target.Smalls[ii]->getNeighbors();
 
-		F_DCEL::Face* best_neighbor = nullptr;
+		Face<Pint>* best_neighbor = nullptr;
 		float best_area_score = 0;
 		ClipperLib::PolyTree best_tree;
 
@@ -855,8 +789,8 @@ void mergeSmalls(Type_Tracker &target) {
 		}
 
 		if (best_neighbor != nullptr) {
-			Fcc ins;
-			Fcc outs;
+			FLL<Face<Pint> *> ins;
+			FLL<Face<Pint> *> outs;
 
 			AllocateTree(best_tree, target.Smalls[ii], ins, outs);
 
@@ -872,12 +806,12 @@ void mergeSmalls(Type_Tracker &target) {
 	}
 }
 
-TArray<_P> choosePointsNear(const F_DCEL::Face &target, int count){
+TArray<_P> choosePointsNear(const Face<Pint> &target, int count, int offset){
 	//pick n points AWAY from the polygon
 	//get center offsets of each face
 	auto bounds = getBounds(&target);
-	auto extent = bounds.GetExtent();
-	auto center = bounds.GetCenter();
+	auto extent = bounds.getExtent();
+	auto center = bounds.getCenter();
 	auto size = 2 * FMath::Max(extent.X, extent.Y);
 
 	auto segments = target.getRootEdge()->listPoints();
@@ -885,9 +819,7 @@ TArray<_P> choosePointsNear(const F_DCEL::Face &target, int count){
 
 	TArray<_P> seeds;
 	for (int ii = 0; ii < count; ii++) {
-		auto direction = circularUniformPoint();
-		direction.Normalize();
-		auto seed = direction * size;
+		_P seed = circularUniformPoint(size);
 		seed.X += center.X;
 		seed.Y += center.Y;
 		//seeds.Push(seed);
@@ -896,25 +828,32 @@ TArray<_P> choosePointsNear(const F_DCEL::Face &target, int count){
 		float best_score = FLT_MAX;
 
 		for (int jj = 0; jj < segment_size; jj++) {
-			auto A = segments[jj];
-			auto B = segments[(jj + 1) % segment_size];
+			_P A = segments[jj];
+			_P B = segments[(jj + 1) % segment_size];
+			
+			_P AB = B - A;
+			_P AP = seed - A;
 
-			auto AB = B - A;
-			auto AP = seed - A;
-			float lengthSqrAB = AB.X * AB.X + AB.Y * AB.Y;
-			float t = (AP.X * AB.X + AP.Y * AB.Y) / lengthSqrAB;
+			int segments;
+			_P step = AB.decompose(segments);
+			_P tangent(-step.Y, step.X);
 
-			if (t < 0) {
-				t = 0;
+			int length = AB.SizeSquared();
+			int t = (AP.X * AB.X + AP.Y * AB.Y);
+
+			_P point;
+			if (t > length) {
+				point = B;
 			}
-			if (t > 1) {
-				t = 1;
+			else if (t < 0) {
+				point = A;
+			}
+			else if (t % length == 0) {
+				int count = (float)segments * ((float)t / (float)length);
+				point = A + step * count + tangent;
 			}
 
-			_P point = A + (AB * t);
-			//point.toGrid(P_micro_grid);
-
-			float score = (point - seed).SizeSquared();
+			int score = (point - seed).SizeSquared();
 			if (score < best_score) {
 				best_score = score;
 				best = point;
@@ -1008,8 +947,8 @@ void prototyper() {
 	//after delete insignificant hallways, (consider length, objective reached, room touched)
 
 	//if a hallway -becomes- insignificant, merge its last child into it, if no children, delete
-	//F_DCEL::Face* start;
-	//F_DCEL::Face* end;
+	//Face<Pint>* start;
+	//Face<Pint>* end;
 
 	TArray<HallwayPrototype*> frontier;
 
@@ -1054,65 +993,71 @@ void prototyper() {
 //==========================================================================================================
 */
 
-TArray<_P> Square_Generator(int x, int y, _P center) {
-	TArray<_P> boundary;
-	boundary.Push(_P(-x, -y) + center);
-	boundary.Push(_P(-x, y) + center);
-	boundary.Push(_P(x, y) + center);
-	boundary.Push(_P(x, -y) + center);
+FLL<Pint> Square_Generator(rto x, rto y, Pint center) {
+	FLL<Pint> boundary;
+	boundary.append(Pint(-x, -y) + center);
+	boundary.append(Pint(-x, y) + center);
+	boundary.append(Pint(x, y) + center);
+	boundary.append(Pint(x, -y) + center);
 
 	return boundary;
 }
-TArray<_P> Diamond_Generator(int x, int y, _P center) {
-	TArray<_P> boundary;
+FLL<Pint> Diamond_Generator(rto x, rto y, Pint center) {
+	FLL<Pint> boundary;
 	if (x < y) {
-		int d = y - x;
-		boundary.Push(_P(-x, -d) + center);
-		boundary.Push(_P(-x, d) + center);
-		boundary.Push(_P(0, y) + center);
-		boundary.Push(_P(x, d) + center);
-		boundary.Push(_P(x, -d) + center);
-		boundary.Push(_P(0, -y) + center);
+		rto d = y - x;
+		boundary.append(Pint(-x, -d) + center);
+		boundary.append(Pint(-x, d) + center);
+		boundary.append(Pint(0, y) + center);
+		boundary.append(Pint(x, d) + center);
+		boundary.append(Pint(x, -d) + center);
+		boundary.append(Pint(0, -y) + center);
 	}
 	else if (x > y) {
-		int d = x - y;
-		boundary.Push(_P(-x, 0) + center);
-		boundary.Push(_P(-d, y) + center);
-		boundary.Push(_P(d, y) + center);
-		boundary.Push(_P(x, 0) + center);
-		boundary.Push(_P(d, -y) + center);
-		boundary.Push(_P(-d, -y) + center);
+		rto d = x - y;
+		boundary.append(Pint(-x, 0) + center);
+		boundary.append(Pint(-d, y) + center);
+		boundary.append(Pint(d, y) + center);
+		boundary.append(Pint(x, 0) + center);
+		boundary.append(Pint(d, -y) + center);
+		boundary.append(Pint(-d, -y) + center);
 	}
 	else {
-		boundary.Push(_P(-x, 0) + center);
-		boundary.Push(_P(0, x) + center);
-		boundary.Push(_P(x, 0) + center);
-		boundary.Push(_P(0, -x) + center);
+		boundary.append(Pint(-x, 0) + center);
+		boundary.append(Pint(0, x) + center);
+		boundary.append(Pint(x, 0) + center);
+		boundary.append(Pint(0, -x) + center);
 	}
 	
 
 	return boundary;
 }
-TArray<_P> Bevel_Generator(int x, int y, _P center) {
-	int level = FMath::Min(x/3, y/3);
+FLL<Pint> Bevel_Generator(rto x, rto y, Pint center) {
+	rto level;
+	if (x < y) {
+		level = x / 4;
+	}
+	else {
+		level = y / 4;
+	}
 
-	TArray<_P> boundary;
+	FLL<Pint> boundary;
 
-	boundary.Push(_P(-x, level - y) + center);
-	boundary.Push(_P(-x, y - level) + center);
-	boundary.Push(_P(level - x, y) + center);
-	boundary.Push(_P(x - level, y) + center);
-	boundary.Push(_P(x, y - level) + center);
-	boundary.Push(_P(x, level - y) + center);
-	boundary.Push(_P(x - level, -y) + center);
-	boundary.Push(_P(level - x, -y) + center);
+	boundary.append(Pint(-x, level - y) + center);
+	boundary.append(Pint(-x, y - level) + center);
+	boundary.append(Pint(level - x, y) + center);
+	boundary.append(Pint(x - level, y) + center);
+	boundary.append(Pint(x, y - level) + center);
+	boundary.append(Pint(x, level - y) + center);
+	boundary.append(Pint(x - level, -y) + center);
+	boundary.append(Pint(level - x, -y) + center);
 
 	return boundary;
 }
 
-typedef TArray<_P> (*generatorFunc)(int, int, _P);
+typedef FLL<Pint> (*generatorFunc)(rto, rto, Pint);
 
-TArray<_P> Pick_Generator(int x, int y, _P center) {
+FLL<Pint> Pick_Generator(rto x, rto y, Pint center) {
 	generatorFunc generator = Square_Generator;
 	float gen_choice = FMath::RandRange(0, 1);
 	if (gen_choice > .4) {
@@ -1127,16 +1072,17 @@ TArray<_P> Pick_Generator(int x, int y, _P center) {
 	return generator(x, y, center);
 }
 
-//void Generate_Building_Shape(F_DCEL::Face* Available, Type_Tracker &system_types) {
+//void Generate_Building_Shape(Face<Pint>* Available, Type_Tracker &system_types) {
 	//generates a set of trackers for each building region
 	//these come with predefined nulls and infrastructure halls
 
 //}
 
-bool createRoomAtPoint(Type_Tracker &system_types, const _P &point, int scale = 1, Fcc *created = nullptr) {
-	Fcc created_rooms;
-	Fcc created_nulls;
-	Fcc raw_faces;
+bool createRoomAtPoint(Type_Tracker &system_types, const _P &point, int scale = 1, FLL<Face<Pint> *> *created = nullptr) {
+	UE_LOG(LogTemp, Warning, TEXT("Create Room At Point\n"));
+	FLL<Face<Pint> *> created_rooms;
+	FLL<Face<Pint> *> created_nulls;
+	FLL<Face<Pint> *> raw_faces;
 	
 	int null_index = -1;
 
@@ -1159,7 +1105,7 @@ bool createRoomAtPoint(Type_Tracker &system_types, const _P &point, int scale = 
 	int width = FMath::RandRange(2, area / 2);
 	int length = area / width;
 
-	auto bounds = Pick_Generator(width * 100 * scale, length * 100 * scale, point);
+	auto bounds = Pick_Generator(width*grid_coef*scale, length*grid_coef*scale, point);
 
 	//cull to null region
 	if (!chosen_null->subAllocateFace(bounds, raw_faces, created_nulls)) {
@@ -1198,7 +1144,7 @@ bool createRoomAtPoint(Type_Tracker &system_types, const _P &point, int scale = 
 }
 
 //attempts to create rooms distributed evenly across the space
-bool createDistributedRooms(Type_Tracker &system_types, const int attempts_per_cell = 5, int scale = 1, Fcc *created = nullptr) {
+bool createDistributedRooms(Type_Tracker &system_types, const int attempts_per_cell = 5, int scale = 1, FLL<Face<Pint> *> *created = nullptr) {
 	//GRID METHOD
 	//from a grid, for each grid point we select a point within a tolerance radius
 	//choose a grid
@@ -1241,7 +1187,7 @@ bool createDistributedRooms(Type_Tracker &system_types, const int attempts_per_c
 	//_P choice = circularUniformPoint();
 }
 
-bool fillNullSpace(Type_Tracker &system_types, int safety = 100, int scale = 1, Fcc *created = nullptr) {
+bool fillNullSpace(Type_Tracker &system_types, int safety = 100, int scale = 1, FLL<Face<Pint> *> *created = nullptr) {
 	while (system_types.Nulls.Num() > 0 && (safety--) > 0) {
 		auto bounds = getBounds(system_types.Nulls[0]);
 		auto choice = boxUniformPoint(bounds);
@@ -1251,15 +1197,60 @@ bool fillNullSpace(Type_Tracker &system_types, int safety = 100, int scale = 1, 
 	return true;
 }
 
-bool createNearRooms(Type_Tracker &system_types, F_DCEL::Face &target, int attempts = 10, int scale = 1, Fcc *created = nullptr) {
-	auto seeds = choosePointsNear(target, attempts);
-	for (auto choice : seeds) {
-		createRoomAtPoint(system_types, choice, scale, created);
+bool createNearRooms(Type_Tracker &system_types, Face<Pint> &target, int attempts = 10, int scale = 1, FLL<Face<Pint> *> *created = nullptr, const UWorld* ref = nullptr) {
+	
+	//auto seeds = choosePointsNear(target, 3 * attempts, 4);
+
+	auto bounds = getBounds(&target);
+
+	attempts = attempts * 3;
+	while (attempts > 0) {
+
+		auto seed = boxUniformPoint(4, 4)*grid_coef;
+		if (seed.X > 0) {
+			seed.X += bounds.Max.X;
+		}
+		else {
+			seed.X += bounds.Min.X;
+		}
+		if (seed.Y > 0) {
+			seed.Y += bounds.Max.Y;
+		}
+		else {
+			seed.Y += bounds.Min.Y;
+		}
+
+		if (ref) {
+			DrawDebugLine(
+				ref,
+				FVector(seed.X * 10 / grid_coef, seed.Y * 10 / grid_coef, 70),
+				FVector(seed.X * 10 / grid_coef, seed.Y * 10 / grid_coef, 80),
+				//FColor(FMath::RandRange(0,255), FMath::RandRange(0, 255), FMath::RandRange(0, 255)),
+				color_Pnk,
+				true,
+				-1,
+				0,
+				6
+			);
+		}
+
+		if (createRoomAtPoint(system_types, seed, scale, created)) {
+			attempts -= 3;
+		}
+		else {
+			attempts--;
+		}
 	}
+
+	//auto seeds = choosePointsNear(target, attempts);
+	//for (auto choice : seeds) {
+	//	createRoomAtPoint(system_types, choice, scale, created);
+	//}
+
 	return true;
 }
 
-bool createLinkingHalls(F_DCEL::Face* target, Fcc &nulls, Fcc &created_faces) {
+bool createLinkingHalls(Face<Pint>* target, FLL<Face<Pint> *> &nulls, FLL<Face<Pint> *> &created_faces) {
 	//tries to generate a set of halls linking two target faces
 
 	return true;
@@ -1267,51 +1258,61 @@ bool createLinkingHalls(F_DCEL::Face* target, Fcc &nulls, Fcc &created_faces) {
 
 struct building_region {
 	int size;
-	F_DCEL::Face* region;
-	building_region* parent;
-	building_region(int s, F_DCEL::Face* r) {
+	Region * region;
+	building_region * parent;
+	building_region(int s, Region * r) {
 		size = s;
 		region = r;
 		parent = nullptr;
 	}
-	building_region(int s, F_DCEL::Face* r, building_region* p) {
+	building_region(int s, Region * r, building_region * p) {
 		size = s;
 		region = r;
 		parent = p;
 	}
 };
 
-void create_Layout(Type_Tracker &system_types, int large, int medium, int small) {
+void create_Layout(Type_Tracker &system_types, int large, int medium, int small, UWorld* ref = nullptr) {
 	//large is 10-14
 	//med is 7-11
 	//small is 4-8
+	UE_LOG(LogTemp, Warning, TEXT("Create Layout\n"));
 	TArray<building_region*> larges;
 	TArray<building_region*> mediums;
 	TArray<building_region*> smalls;
 
 	for (int ii = 0; ii < large; ii++) {
 		//pick point
-		auto point = circularUniformPoint(800);
+		auto point = boxUniformPoint(80,80) -Pint(40, 40);
 		//point.toGrid(P_micro_grid);
-		Fcc temp_created;
-		if (createRoomAtPoint(system_types, point, FMath::RandRange(10, 14), &temp_created)) {
+		FLL<Face<Pint> *> temp_created;
+		if (createRoomAtPoint(system_types, point, 7, &temp_created)) { //FMath::RandRange(6, 10)
 			for (auto room : temp_created) {
 				larges.Push(new building_region(0, room));
 			}
 		}
 	}
+
+	/*FLL<Face<Pint> *> temp_created;
+	createRoomAtPoint(system_types, _P(10 * grid_coef, -10 * grid_coef), 1, &temp_created);
+	createRoomAtPoint(system_types, _P(-5 * grid_coef, -8 * grid_coef), 1, &temp_created);
+	for (auto room : temp_created) {
+		larges.Push(new building_region(0, room));
+	}*/
+
+
 	for (auto region : larges) {
 		//creates some MEDIUMS
-		Fcc temp_created;
-		createNearRooms(system_types, *region->region, 5, FMath::RandRange(7, 11), &temp_created);
+		FLL<Face<Pint> *> temp_created;
+		createNearRooms(system_types, *region->region, medium, 5, &temp_created, ref);
 		for (auto room : temp_created) {
 			mediums.Push(new building_region(1, room, region));
 		}
 	}
 	for (auto region : mediums) {
 		//creates some MEDIUMS
-		Fcc temp_created;
-		createNearRooms(system_types, *region->region, 5, FMath::RandRange(4, 8), &temp_created);
+		FLL<Face<Pint> *> temp_created;
+		createNearRooms(system_types, *region->region, small, 4, &temp_created, ref);
 		for (auto room : temp_created) {
 			smalls.Push(new building_region(2, room, region));
 		}
@@ -1329,20 +1330,22 @@ void create_Layout(Type_Tracker &system_types, int large, int medium, int small)
 }
 
 void Aroom_description_builder::Main_Generation_Loop() {
-	F_DCEL system_new;
+	UE_LOG(LogTemp, Warning, TEXT("Main Generation\n"));
+	DCEL<Pint> system_new;
 	Type_Tracker system_types;
 
 	//generate enclosure (null space)
 	//float system_x = FMath::RandRange(5, 9) * 4;
 	//float system_y = FMath::RandRange(2, 4) * 4;
 
-	auto system_bounds = Square_Generator(25000,25000,_P(0,0));
-	Draw_Border(to_FVector(system_bounds), 0, GetWorld());
+	auto system_bounds = Square_Generator(100, 100, Pint(0,0));
 
-	system_types.Nulls.Push(system_new.createFace(system_bounds));
-	//system_types.Nulls.Push(system_new.createUniverse());
+	Draw_Border(toFVector(system_bounds), 0, GetWorld());
 
-	create_Layout(system_types, 2, 2, 2);
+	system_types.Nulls.append(new Region(&system_new, system_bounds));
+	//system_types.Nulls.Push(system_new.createUniverse()); system_new.draw(system_bounds)
+
+	create_Layout(system_types, 3, 3, 2, GetWorld());
 
 	//generate MAIN region
 	//createRoomAtPoint(system_types, _P(0, 0), 4);

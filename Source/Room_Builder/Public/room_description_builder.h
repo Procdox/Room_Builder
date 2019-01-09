@@ -6,8 +6,8 @@
 #include "GameFramework/Actor.h"
 #include "ProceduralMeshComponent.h"
 #include "../ThirdParty/ClipperLib/Includes/ClipperLib.h"
-//#include "../ThirdParty/DCEL/Includes/DCEL.h"
-#include "DCEL.h"
+#include "../ThirdParty/DCEL_CUTS/Includes/DCEL_Region.h"
+//#include "DCEL.h"
 #include "room_description_builder.generated.h"
 
 USTRUCT()
@@ -64,10 +64,10 @@ public:
 	// Sets default values for this actor's properties
 	Aroom_description_builder();
 
-	void CreateDoor(const FVector2D &a, const FVector2D &b, float Bottom, float Top);
+	void CreateDoor(Pint const & wall_left, Pint const & wall_right, float bottom, float top);
 
-	void Create_Floor_Ceiling_New(const F_DCEL::Face* source, float bottom, float top);
-	void Create_Wall_Sections_New(const F_DCEL::Face* source, float Bottom, float Top, int &h);
+	void Create_Floor_Ceiling_New(Region const & source, float bottom, float top);
+	void Create_Wall_Sections_New(Region const & source, float bottom, float top);
 
 	void Main_Generation_Loop();
 
