@@ -12,6 +12,7 @@ The structure specifically details how regions who have intersecting boundaries 
 template <class _P> class Point;
 template <class _P> class Edge;
 template <class _P> class Face;
+template <class _P> class Region;
 template <class _P> class DCEL;
 
 // Represents a point in space, the ends of edges, and corners of faces
@@ -36,6 +37,10 @@ class Point {
 	};
 	Point(Point<_P> &&) = delete;
 	Point(Point<_P> const &) = delete;
+
+	~Point() {
+
+	}
 public:
 	void setPosition(_P p) {
 		position = p;
@@ -101,6 +106,10 @@ class Edge {
 	}
 	Edge(Edge<_P> &&) = delete;
 	Edge(Edge<_P> const &) = delete;
+
+	~Edge() {
+
+	}
 public:
 	//%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	//         Traversal Methods
@@ -462,22 +471,32 @@ public:
 template <class _P>
 class Face {
 	friend DCEL<_P>;
+	friend Region<_P>;
 	friend Edge<_P>;
 
 	DCEL<_P> * universe;
 
 	Edge<_P> * root;
 
+	Region<_P> * group;
+
 	//this can only be created through DCEL system functions
 	Face(DCEL<_P> * uni) {
+		universe = uni;
+		group = nullptr;
+	}
+	Face(DCEL<_P> * uni, Region<_P> * grp) {
 		universe = uni;
 	}
 	Face(Face<_P> &&) = delete;
 	Face(Face<_P> const &) = delete;
 
+	~Face() {
+
+	}
+
 	//%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	//         Modifiers
-
 	//sets all edges of this loop to reference this
 	void reFace() {
 		Edge<_P> * focus = root;
@@ -497,6 +516,14 @@ public:
 
 	Edge<_P> const * getRoot() const {
 		return root;
+	}
+
+	Region<_P> * getGroup() {
+		return group;
+	}
+
+	Region<_P> const * getGroup() const {
+		return group;
 	}
 
 	//%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -552,6 +579,21 @@ public:
 		do {
 			target.append(focus);
 
+			focus = focus->next;
+		} while (focus != root);
+
+		return target;
+	}
+
+	FLL<Face<_P> *> getNeighbors() {
+		FLL<Face<_P> *> target;
+		Edge<_P> * focus = root;
+
+		do {
+			Face<_P> * canidate = focus->inv->loop;
+			if (!target.contains(canidate)) {
+				target.append(canidate);
+			}
 			focus = focus->next;
 		} while (focus != root);
 
@@ -644,15 +686,87 @@ public:
 		}
 		return product;
 	}
-
-	//void cleanBorder();
 };
+
+template <class _P>
+class Region {
+	friend DCEL<_P>;
+
+	DCEL<_P> * universe;
+
+	Region(DCEL<Pint> * uni) {
+		universe = uni;
+	}
+	~Region() {
+
+	}
+	FLL<Face<_P> *> Boundaries;
+
+public:
+	FLL<Face<_P> *> const & getBounds() {
+		return Boundaries;
+	}
+	Face<_P> * operator[](int a) {
+		return Boundaries[a];
+	}
+
+	int size() const {
+		return Boundaries.size();
+	}
+
+	void append(Face<Pint> * border) {
+		if (border->group != this) {
+			if (border->group != nullptr) {
+				border->group->remove(border);
+			}
+
+			border->group = this;
+			Boundaries.push(border);
+		}
+	}
+	void remove(Face<Pint> * border) {
+		if (border->group == this) {
+			border->group = nullptr;
+			Boundaries.remove(border);
+		}
+	}
+	void clear() {
+		for (auto border : Boundaries) {
+			border->group = nullptr;
+		}
+
+		Boundaries.clear();
+	}
+
+	DCEL<_P> * getUni() {
+		return universe;
+	}
+
+	FLL<Region *> getNeighbors() {
+		FLL<Region *> product;
+
+		for (auto border : Boundaries) {
+			auto canidates = border->getNeighbors();
+			for (auto suggest : canidates) {
+				if (!product.contains(suggest->group)) {
+					product.push(suggest->group);
+				}
+			}
+		}
+
+		return product;
+	}
+
+};
+
+
 
 template <class _P>
 class DCEL {
 	FLL<Point<_P> *> points;
 	FLL<Edge<_P> *> edges;
 	FLL<Face<_P> *> faces;
+	FLL<Region<_P> *> regions;
 
 	friend Edge<_P>;
 
@@ -686,17 +800,15 @@ class DCEL {
 	}
 
 	//removes a point
-	//does NOT check to see if references elsewhere
+	//does NOT check to see if referenced elsewhere
 	void removePoint(Point<_P> * target) {
-		//is it ACTUALLY disconnected? AHHHHHHHHH
 		points.remove(target);
 
 		delete target;
 	}
 	//removes an edge and its inverse
-	//does NOT check to see if references elsewhere
+	//does NOT check to see if referenced elsewhere
 	void removeEdge(Edge<_P> * target) {
-		//is it ACTUALLY disconnected? AHHHHHHHHH
 		edges.remove(target);
 		edges.remove(target->inv);
 
@@ -704,9 +816,8 @@ class DCEL {
 		delete target;
 	}
 	//removes a face
-	//does NOT check to see if references elsewhere
+	//does NOT check to see if referenced elsewhere
 	void removeFace(Face<_P> * target) {
-		//is it ACTUALLY disconnected? AHHHHHHHHH
 		faces.remove(target);
 
 		delete target;
@@ -725,6 +836,10 @@ public:
 		for (auto focus_face : faces) {
 			delete focus_face;
 		}
+
+		for (auto focus_region : regions) {
+			delete focus_region;
+		}
 	}
 
 	int pointCount() const {
@@ -735,6 +850,9 @@ public:
 	}
 	int faceCount() const {
 		return faces.size();
+	}
+	int regionCount() const {
+		return regions.size();
 	}
 
 	//creates an edge and its inverse connecting two novel points
@@ -828,6 +946,24 @@ public:
 		return result;
 	}
 
+	Region<_P> * region() {
+		Region<_P> * product = new Region<_P>(this);
+		regions.append(product);
+		return product;
+	}
+
+	Region<_P> * region(Face<_P> * face) {
+		Region<_P> * product = new Region<_P>(this);
+		product->append(face);
+		regions.append(product);
+		return product;
+	}
+	Region<_P> * region(FLL<_P> const &boundary) {
+		Region<_P> * product = new Region<_P>(this);
+		product->append(draw(boundary));
+		regions.append(product);
+		return product;
+	}
 
 	//creates a circular chain of edges forming a loop with the given boundary
 	//returns a pointer to the clock-wise oriented interior of the boundary
@@ -856,6 +992,11 @@ public:
 		return start->loop;
 	}
 
+	//removes a region
+	//does NOT check to see if referenced elsewhere
+	void removeRegion(Region<_P> * target) {
+		regions.remove(target);
 
-	//void sanityCheck(); TODO
+		delete target;
+	}
 };

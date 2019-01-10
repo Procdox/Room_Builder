@@ -19,7 +19,7 @@ ClipperLib::Path toPath(FLL<Pint> const &target) {
 
 }
 
-ClipperLib::Paths toPaths(Region const * target) {
+ClipperLib::Paths toPaths(Region<Pint> const * target) {
 
 }
 
@@ -81,18 +81,18 @@ Pint boxUniformPoint(PBox const & box, int divisions = 100) {
 	return Pint(X, Y) * box.getExtent() + box.getCenter();
 }
 
-PBox getBounds(Region const * target) {
+PBox getBounds(Region<Pint> * target) {
 
 	PBox result;
 
-	auto init = target->getBounds()->last()->getRoot()->getStart()->getPosition();
+	auto init = target->getBounds().last()->getRoot()->getStart()->getPosition();
 
 	result.Max.X = init.X;
 	result.Max.Y = init.Y;
 
 	result.Min = result.Max;
 
-	for(auto boundary : *target->getBounds()){
+	for(auto boundary : target->getBounds()){
 		auto points = boundary->getLoopPoints();
 
 		for (auto point : points) {
@@ -114,19 +114,19 @@ namespace polytree_utils
 {
 	using namespace ClipperLib;
 
-	void AllocateNode(PolyNode * ref, FLL<Region *> targets, FLL<Region *> &ins, FLL<Region *> &outs) {
+	void AllocateNode(PolyNode * ref, FLL<Region<Pint> *> targets, FLL<Region<Pint> *> &ins, FLL<Region<Pint> *> &outs) {
 
 		auto contour = fromPath(ref->Contour);
 
-		FLL<Region *> relative_outs;
-		FLL<Region *> relative_ins;
+		FLL<Region<Pint> *> relative_outs;
+		FLL<Region<Pint> *> relative_ins;
 
 		for (auto target : targets) {
 			subAllocate(target, contour, relative_ins, relative_outs);
 		}
 
 		for (auto outer : ref->Childs) {
-			FLL<Region *> novel_ins;
+			FLL<Region<Pint> *> novel_ins;
 
 			AllocateNode(outer, relative_ins, outs, novel_ins);
 
@@ -137,10 +137,10 @@ namespace polytree_utils
 		ins.absorb(relative_ins);
 	}
 
-	void AllocateTree(PolyTree & ref, FLL<Region *> targets, FLL<Region *> &ins, FLL<Region *> &outs) {
+	void AllocateTree(PolyTree & ref, FLL<Region<Pint> *> targets, FLL<Region<Pint> *> &ins, FLL<Region<Pint> *> &outs) {
 
 		for (auto outer : ref.Childs) {
-			FLL<Region *> novel_outs;
+			FLL<Region<Pint> *> novel_outs;
 
 			AllocateNode(outer, targets, ins, novel_outs);
 
@@ -151,9 +151,9 @@ namespace polytree_utils
 		outs.absorb(targets);
 	}
 
-	void AllocateTree(PolyTree & ref, Region * target, FLL<Region *> &ins, FLL<Region *> &outs) {
+	void AllocateTree(PolyTree & ref, Region<Pint> * target, FLL<Region<Pint> *> &ins, FLL<Region<Pint> *> &outs) {
 
-		FLL<Region *> targets;
+		FLL<Region<Pint> *> targets;
 		targets.append(target);
 
 		AllocateTree(ref, targets, ins, outs);
@@ -395,8 +395,8 @@ void Aroom_description_builder::CreateDoor(Pint const & wall_left, Pint const & 
 
 	Wall_Mesh->RegisterComponentWithWorld(GetWorld());
 }
-void Aroom_description_builder::Create_Floor_Ceiling_New(Region const & source, float bottom, float top) {
-	auto Border = toFVector(source.getBounds()->last()->getLoopPoints());
+void Aroom_description_builder::Create_Floor_Ceiling_New(Region<Pint> * source, float bottom, float top) {
+	auto Border = toFVector(source->getBounds().last()->getLoopPoints());
 
 	TArray<int32> Index_Faked;
 	Index_Faked.SetNum(Border.Num());
@@ -441,9 +441,9 @@ void Aroom_description_builder::Create_Floor_Ceiling_New(Region const & source, 
 	Floor_Mesh->RegisterComponentWithWorld(GetWorld());
 
 }
-void Aroom_description_builder::Create_Wall_Sections_New(Region const & source, float bottom, float top) {
+void Aroom_description_builder::Create_Wall_Sections_New(Region<Pint> * source, float bottom, float top) {
 
-	for(auto border : *source.getBounds()) {
+	for(auto border : source->getBounds()) {
 		auto border_points = border->getLoopPoints();
 
 		Draw_Border(toFVector(border_points), 50, GetWorld());
@@ -466,11 +466,11 @@ void Aroom_description_builder::Create_Wall_Sections_New(Region const & source, 
 //==========================================================================================================
 
 struct Type_Tracker {
-	FLL<Region *> Nulls;
-	FLL<Region *> Rooms;
-	FLL<Region *> Halls;
-	FLL<Region *> Smalls;
-	bool isRoom(Region const * target) {
+	FLL<Region<Pint> *> Nulls;
+	FLL<Region<Pint> *> Rooms;
+	FLL<Region<Pint> *> Halls;
+	FLL<Region<Pint> *> Smalls;
+	bool isRoom(Region<Pint> const * target) {
 		for (auto room : Rooms) {
 			if (room == target) {
 				return true;
@@ -481,28 +481,28 @@ struct Type_Tracker {
 	void display(const UWorld* world) {
 		int p = 0;
 		for (auto small : Smalls) {
-			small->clean();
-			for(auto border : *small->getBounds())
+			cleanRegion(small);
+			for(auto border : small->getBounds())
 				Draw_Border(toFVector(border->getLoopPoints()), 72, world, color_Pnk);
 		}
 
 		for (auto room : Rooms) {
-			room->clean();
+			cleanRegion(room);
 			//Create_Floor_Ceiling_New(room, 0, 200);
 			//Create_Wall_Sections_New(room, 0, 200, h);
-			for (auto border : *room->getBounds())
+			for (auto border : room->getBounds())
 				Draw_Border(toFVector(border->getLoopPoints()), 70, world, color_blue);
 		}
 
 		for (auto null : Nulls) {
-			null->clean();
-			for (auto border : *null->getBounds())
+			cleanRegion(null);
+			for (auto border : null->getBounds())
 				Draw_Border(toFVector(border->getLoopPoints()), 65, world, color_red);
 		}
 
 		for (auto hall : Halls) {
-			hall->clean();
-			for (auto border : *hall->getBounds())
+			cleanRegion(hall);
+			for (auto border : hall->getBounds())
 				Draw_Border(toFVector(border->getLoopPoints()), 74, world, color_green);
 		}
 	}
@@ -513,12 +513,12 @@ struct Type_Tracker {
 	//}
 };
 
-bool Cull_Suggested(Region * target, FLL<Region *> &results, FLL<Region *> &nulls) {
+bool Cull_Suggested(Region<Pint> * target, FLL<Region<Pint> *> &results, FLL<Region<Pint> *> &nulls) {
 	UE_LOG(LogTemp, Warning, TEXT("Culling\n"));
 
 	ClipperLib::Paths reduced;
-	FLL<Region *> rooms;
-	FLL<Region*> outers;
+	FLL<Region<Pint> *> rooms;
+	FLL<Region<Pint>*> outers;
 
 	{
 
@@ -539,7 +539,7 @@ bool Cull_Suggested(Region * target, FLL<Region *> &results, FLL<Region *> &null
 
 	//IF THE ROOM HAS ANY HOLES WE'RE FUCKED
 	for (auto section : reduced) {
-		FLL<Region *> created_outers;
+		FLL<Region<Pint> *> created_outers;
 
 		ClipperLib::PolyTree rooms_tree;
 		ClipperLib::ClipperOffset clipper_expander;
@@ -559,7 +559,7 @@ bool Cull_Suggested(Region * target, FLL<Region *> &results, FLL<Region *> &null
 	return true;
 }
 
-void mergeGroup(FLL<Region *> &nulls) {
+void mergeGroup(FLL<Region<Pint> *> & nulls) {
 	UE_LOG(LogTemp, Warning, TEXT("Merging Group\n"));
 	for (auto focus = nulls.begin(); focus != nulls.end(); ++focus) {
 		for (auto compare = focus.next(); focus != nulls.end();) {
@@ -567,7 +567,8 @@ void mergeGroup(FLL<Region *> &nulls) {
 
 			++compare;
 
-			focus->merge(v);
+			merge(*focus, v);
+
 			nulls.remove(v);
 		}
 	}
@@ -638,15 +639,15 @@ ClipperLib::Paths subtractPaths(ClipperLib::Paths &source, ClipperLib::Paths &su
 void cleanNulls(Type_Tracker &target) {
 	UE_LOG(LogTemp, Warning, TEXT("Clean Nulls\n"));
 
-	FLL<Region *> input_nulls;
+	FLL<Region<Pint> *> input_nulls;
 	input_nulls.absorb(target.Nulls);
 	input_nulls.absorb(target.Halls);
 	//input_nulls.Append(target.Smalls);
 	mergeGroup(input_nulls);
 
-	FLL<Region *> cleaned_nulls;
-	FLL<Region *> pruned_halls;
-	FLL<Region *> pruned_smalls;
+	FLL<Region<Pint> *> cleaned_nulls;
+	FLL<Region<Pint> *> pruned_halls;
+	FLL<Region<Pint> *> pruned_smalls;
 
 	for (auto focus : input_nulls) {
 		ClipperLib::Paths source = toPaths(focus);
@@ -661,10 +662,10 @@ void cleanNulls(Type_Tracker &target) {
 		auto room_tree = makeTree(room_paths);
 		auto hall_tree = makeTree(hall_paths);
 
-		FLL<Region *> room_ins;
-		FLL<Region *> room_outs;
-		FLL<Region *> hall_ins;
-		FLL<Region *> hall_outs;
+		FLL<Region<Pint> *> room_ins;
+		FLL<Region<Pint> *> room_outs;
+		FLL<Region<Pint> *> hall_ins;
+		FLL<Region<Pint> *> hall_outs;
 
 		polytree_utils::AllocateTree(room_tree, focus, room_ins, room_outs);
 
@@ -692,9 +693,9 @@ void mergeSmalls(Type_Tracker &target) {
 	for (auto small : target.Smalls) {
 		auto local_boundary = toPaths(small);
 		
-		FLL<Region *> neighbors = small->getNeighbors();
+		FLL<Region<Pint> *> neighbors = small->getNeighbors();
 
-		Region * best_neighbor = nullptr;
+		Region<Pint> * best_neighbor = nullptr;
 		float best_area_score = 0;
 		ClipperLib::PolyTree best_tree;
 
@@ -720,14 +721,14 @@ void mergeSmalls(Type_Tracker &target) {
 		}
 
 		if (best_neighbor != nullptr) {
-			FLL<Region *> ins;
-			FLL<Region *> outs;
+			FLL<Region<Pint> *> ins;
+			FLL<Region<Pint> *> outs;
 
 			
 			polytree_utils::AllocateTree(best_tree, small, ins, outs);
 
 			for (auto in : ins) {
-				best_neighbor->merge(in);
+				merge(best_neighbor, in);
 			}
 
 			target.Smalls.remove(small);
@@ -736,7 +737,7 @@ void mergeSmalls(Type_Tracker &target) {
 	}
 }
 /*
-FLL<Pint> choosePointsNear(Region const & target, int count, rto offset){
+FLL<Pint> choosePointsNear(Region<Pint> const & target, int count, rto offset){
 	//pick n points AWAY from the polygon
 	//get center offsets of each face
 	
@@ -994,22 +995,22 @@ FLL<Pint> Pick_Generator(rto x, rto y, Pint center) {
 }
 
 //void Generate_Building_Shape(Face<Pint>* Available, Type_Tracker &system_types) {
-	//generates a set of trackers for each building region
+	//generates a set of trackers for each building Region<Pint>
 	//these come with predefined nulls and infrastructure halls
 
 //}
 
-bool createRoomAtPoint(Type_Tracker &system_types, const Pint &point, int scale = 1, FLL<Region *> * created = nullptr) {
+bool createRoomAtPoint(Type_Tracker &system_types, const Pint &point, int scale = 1, FLL<Region<Pint> *> * created = nullptr) {
 	UE_LOG(LogTemp, Warning, TEXT("Create Room At Point\n"));
-	FLL<Region *> created_rooms;
-	FLL<Region *> created_nulls;
-	FLL<Region *> raw_faces;
+	FLL<Region<Pint> *> created_rooms;
+	FLL<Region<Pint> *> created_nulls;
+	FLL<Region<Pint> *> raw_faces;
 	
-	Region * choice = nullptr;
+	Region<Pint> * choice = nullptr;
 
 	//find containing null
 	for (auto null : system_types.Nulls) {
-		if (null->contains(point).type != FaceRelationType::point_exterior) {
+		if (contains(null, point).type != FaceRelationType::point_exterior) {
 			choice = null;
 			break;
 		}
@@ -1027,7 +1028,7 @@ bool createRoomAtPoint(Type_Tracker &system_types, const Pint &point, int scale 
 
 	auto bounds = Pick_Generator(width * scale, length * scale, point);
 
-	//cull to null region
+	//cull to null Region<Pint>
 	subAllocate(choice, bounds, created_nulls, raw_faces);
 
 	//remerge rejected regions with nulls
@@ -1049,7 +1050,7 @@ bool createRoomAtPoint(Type_Tracker &system_types, const Pint &point, int scale 
 }
 
 //attempts to create rooms distributed evenly across the space
-bool createDistributedRooms(Type_Tracker &system_types, const int attempts_per_cell = 5, int scale = 1, FLL<Region *> *created = nullptr) {
+bool createDistributedRooms(Type_Tracker &system_types, const int attempts_per_cell = 5, int scale = 1, FLL<Region<Pint> *> *created = nullptr) {
 	//GRID METHOD
 	//from a grid, for each grid point we select a point within a tolerance radius
 	//choose a grid
@@ -1092,7 +1093,7 @@ bool createDistributedRooms(Type_Tracker &system_types, const int attempts_per_c
 	//_P choice = circularUniformPoint();
 }
 
-bool fillNullSpace(Type_Tracker &system_types, int safety = 100, int scale = 1, FLL<Region *> *created = nullptr) {
+bool fillNullSpace(Type_Tracker &system_types, int safety = 100, int scale = 1, FLL<Region<Pint> *> *created = nullptr) {
 	while (!system_types.Nulls.empty() && (safety--) > 0) {
 
 		auto bounds = getBounds(system_types.Nulls.last());
@@ -1104,7 +1105,7 @@ bool fillNullSpace(Type_Tracker &system_types, int safety = 100, int scale = 1, 
 	return true;
 }
 
-bool createNearRooms(Type_Tracker &system_types, Region * target, int attempts = 10, int scale = 1, FLL<Region *> *created = nullptr, const UWorld* ref = nullptr) {
+bool createNearRooms(Type_Tracker &system_types, Region<Pint> * target, int attempts = 10, int scale = 1, FLL<Region<Pint> *> *created = nullptr, const UWorld* ref = nullptr) {
 	
 	//auto seeds = choosePointsNear(target, 3 * attempts, 4);
 
@@ -1157,7 +1158,7 @@ bool createNearRooms(Type_Tracker &system_types, Region * target, int attempts =
 	return true;
 }
 
-bool createLinkingHalls(Region * target, FLL<Region *> &nulls, FLL<Region *> &created_faces) {
+bool createLinkingHalls(Region<Pint> * target, FLL<Region<Pint> *> &nulls, FLL<Region<Pint> *> &created_faces) {
 	//tries to generate a set of halls linking two target faces
 
 	return true;
@@ -1165,14 +1166,14 @@ bool createLinkingHalls(Region * target, FLL<Region *> &nulls, FLL<Region *> &cr
 
 struct building_region {
 	int size;
-	Region * region;
+	Region<Pint> * region;
 	building_region * parent;
-	building_region(int s, Region * r) {
+	building_region(int s, Region<Pint> * r) {
 		size = s;
 		region = r;
 		parent = nullptr;
 	}
-	building_region(int s, Region * r, building_region * p) {
+	building_region(int s, Region<Pint> * r, building_region * p) {
 		size = s;
 		region = r;
 		parent = p;
@@ -1192,7 +1193,7 @@ void create_Layout(Type_Tracker &system_types, int large, int medium, int small,
 		//pick point
 		auto point = boxUniformPoint(80,80) -Pint(40, 40);
 		//point.toGrid(P_micro_grid);
-		FLL<Region *> temp_created;
+		FLL<Region<Pint> *> temp_created;
 		if (createRoomAtPoint(system_types, point, 7, &temp_created)) { //FMath::RandRange(6, 10)
 			for (auto room : temp_created) {
 				larges.Push(new building_region(0, room));
@@ -1208,31 +1209,31 @@ void create_Layout(Type_Tracker &system_types, int large, int medium, int small,
 	}*/
 
 
-	for (auto region : larges) {
+	for (auto large : larges) {
 		//creates some MEDIUMS
-		FLL<Region *> temp_created;
-		createNearRooms(system_types, region->region, medium, 5, &temp_created, ref);
+		FLL<Region<Pint> *> temp_created;
+		createNearRooms(system_types, large->region, medium, 5, &temp_created, ref);
 		for (auto room : temp_created) {
-			mediums.Push(new building_region(1, room, region));
+			mediums.Push(new building_region(1, room, large));
 		}
 	}
-	for (auto region : mediums) {
+	for (auto medium : mediums) {
 		//creates some MEDIUMS
-		FLL<Region *> temp_created;
-		createNearRooms(system_types, region->region, small, 4, &temp_created, ref);
+		FLL<Region<Pint> *> temp_created;
+		createNearRooms(system_types, medium->region, small, 4, &temp_created, ref);
 		for (auto room : temp_created) {
-			smalls.Push(new building_region(2, room, region));
+			smalls.Push(new building_region(2, room, medium));
 		}
 	}
 
-	for (auto region : larges) {
-		delete region;
+	for (auto large : larges) {
+		delete large;
 	}
-	for (auto region : mediums) {
-		delete region;
+	for (auto medium : mediums) {
+		delete medium;
 	}
-	for (auto region : smalls) {
-		delete region;
+	for (auto small : smalls) {
+		delete small;
 	}
 }
 
@@ -1248,13 +1249,13 @@ void Aroom_description_builder::Main_Generation_Loop() {
 	auto system_bounds = Square_Generator(100, 100, Pint(0,0));
 
 	Draw_Border(toFVector(system_bounds), 0, GetWorld());
-
-	system_types.Nulls.append(new Region(&system_new, system_bounds));
+	
+	system_types.Nulls.append(system_new.region(system_bounds));
 	//system_types.Nulls.Push(system_new.createUniverse()); system_new.draw(system_bounds)
 
 	create_Layout(system_types, 3, 3, 2, GetWorld());
 
-	//generate MAIN region
+	//generate MAIN Region<Pint>
 	//createRoomAtPoint(system_types, _P(0, 0), 4);
 
 	//createNearRooms(system_types, *system_types.Rooms[0], 5, 2);

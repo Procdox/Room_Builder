@@ -44,44 +44,19 @@ struct FaceRelation {
 
 FaceRelation const getPointRelation(Face<Pint> &rel, Pint const &test_point);
 
-class Region {
-	FLL<Face<Pint> *> Boundaries;
-	DCEL<Pint> * universe;
+bool merge(Region<Pint> * a, Region<Pint> * b);
 
-	friend void determineInteriors(Region *, FLL<interact *> &,
-		FLL<Face<Pint> *> &, FLL<Face<Pint> *> &);
+void determineInteriors(Region<Pint> *, FLL<interact *> &, FLL<Face<Pint> *> &, 
+	FLL<Face<Pint> *> &);
 
-	friend bool markRegion(Region *, FLL<Pint> const &, FLL<interact *> &);
+bool markRegion(Region<Pint> *, FLL<Pint> const &, FLL<interact *> &);
 
+//type dependent
+void subAllocate(Region<Pint> * target, FLL<Pint> const & boundary, 
+	FLL<Region<Pint> *> &exteriors, FLL<Region<Pint> *> & interiors);
 
-	friend void subAllocate(Region* target, FLL<Pint> const & boundary, FLL<Region*> &exteriors, FLL<Region *> & interiors);
+FaceRelation contains(Region<Pint> * target, Pint const & test_point);
 
-public:
-	Region(DCEL<Pint> *);
-	Region(DCEL<Pint> *, FLL<Pint> const &);
-	Region(DCEL<Pint> *, Face<Pint> *);
+FLL<Region<Pint> *> getNeighbors(Region<Pint> * target);
 
-	FLL< Face<Pint> *> const * getBounds() const {
-		return &Boundaries;
-	}
-
-	//returns nullptr if out of bounds
-	Face<Pint> * operator[](int index) {
-		return Boundaries[index];
-	}
-
-	int size() const {
-		return Boundaries.size();
-	}
-
-	FaceRelation contains(Pint const & test_point) ;
-
-	//if non-trivially connected, will absorb the target region into this one via face merging
-	bool merge(Region*);
-
-	//merges parrallel adjacent edges who's mid point has a degree of just two
-	void clean();
-
-};
-
-
+void cleanRegion(Region<Pint> * target);
