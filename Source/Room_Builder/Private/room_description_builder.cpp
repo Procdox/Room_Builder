@@ -82,22 +82,25 @@ Pint boxUniformPoint(PBox const & box, int divisions = 100) {
 }
 
 PBox getBounds(Region const * target) {
+
 	PBox result;
 
-	auto boundary = target->getLoopPoints();
+	auto init = target->getBounds()->last()->getRoot()->getStart()->getPosition();
 
-	auto focus = boundary.last();
-
-	result.Max.X = focus.X;
-	result.Max.Y = focus.Y;
+	result.Max.X = init.X;
+	result.Max.Y = init.Y;
 
 	result.Min = result.Max;
 
-	for(auto point : boundary) {
-		result.Min.X = FMath::Min(result.Min.X, point.X);
-		result.Min.Y = FMath::Min(result.Min.Y, point.Y);
-		result.Max.X = FMath::Max(result.Max.X, point.X);
-		result.Max.Y = FMath::Max(result.Max.Y, point.Y);
+	for(auto boundary : *target->getBounds()){
+		auto points = boundary->getLoopPoints();
+
+		for (auto point : points) {
+			result.Min.X = FMath::Min(result.Min.X, point.X);
+			result.Min.Y = FMath::Min(result.Min.Y, point.Y);
+			result.Max.X = FMath::Max(result.Max.X, point.X);
+			result.Max.Y = FMath::Max(result.Max.Y, point.Y);
+		}
 	}
 
 	return result;
@@ -146,6 +149,14 @@ namespace polytree_utils
 		}
 
 		outs.absorb(targets);
+	}
+
+	void AllocateTree(PolyTree & ref, Region * target, FLL<Region *> &ins, FLL<Region *> &outs) {
+
+		FLL<Region *> targets;
+		targets.append(target);
+
+		AllocateTree(ref, targets, ins, outs);
 	}
 }
 
@@ -562,6 +573,68 @@ void mergeGroup(FLL<Region *> &nulls) {
 	}
 }
 
+ClipperLib::PolyTree makeTree(ClipperLib::Paths &source) {
+	ClipperLib::PolyTree result;
+
+	ClipperLib::Clipper clip;
+
+	clip.AddPaths(source, ClipperLib::ptSubject, true);
+
+	clip.Execute(ClipperLib::ctUnion, result);
+}
+
+ClipperLib::Paths sizeRestrictPaths(ClipperLib::Paths &source, int radius) {
+	ClipperLib::Paths result;
+
+	ClipperLib::Paths reduced;
+	ClipperLib::Paths expanded;
+
+	ClipperLib::ClipperOffset clipper_reducer;
+	ClipperLib::ClipperOffset clipper_expander;
+
+	clipper_expander.MiterLimit = 100;
+
+	clipper_reducer.AddPaths(source, ClipperLib::jtMiter, ClipperLib::etClosedPolygon);
+	clipper_reducer.Execute(reduced, -radius);
+
+	clipper_expander.AddPaths(reduced, ClipperLib::jtMiter, ClipperLib::etClosedPolygon);
+	clipper_expander.Execute(expanded, radius);
+
+	ClipperLib::Clipper clipper_restriction;
+
+	clipper_restriction.AddPaths(expanded, ClipperLib::ptSubject, true);
+	clipper_restriction.AddPaths(source, ClipperLib::ptClip, true);
+	clipper_restriction.Execute(ClipperLib::ctIntersection, result);
+
+	return result;
+}
+
+ClipperLib::Paths addPaths(ClipperLib::Paths &source, ClipperLib::Paths &add) {
+	ClipperLib::Paths result;
+
+	ClipperLib::Clipper clip;
+
+	clip.AddPaths(source, ClipperLib::ptSubject, true);
+	clip.AddPaths(add, ClipperLib::ptClip, true);
+	clip.Execute(ClipperLib::ctUnion, result);
+
+	return result;
+}
+
+ClipperLib::Paths subtractPaths(ClipperLib::Paths &source, ClipperLib::Paths &sub) {
+	ClipperLib::Paths result;
+
+	ClipperLib::Clipper clip;
+
+	clip.AddPaths(source, ClipperLib::ptSubject, true);
+	clip.AddPaths(sub, ClipperLib::ptClip, true);
+	clip.Execute(ClipperLib::ctDifference, result);
+
+	return result;
+}
+
+
+
 void cleanNulls(Type_Tracker &target) {
 	UE_LOG(LogTemp, Warning, TEXT("Clean Nulls\n"));
 
@@ -577,145 +650,30 @@ void cleanNulls(Type_Tracker &target) {
 
 	for (auto focus : input_nulls) {
 		ClipperLib::Paths source = toPaths(focus);
-		ClipperLib::Paths room_ready;
-		{
-			ClipperLib::Paths reduced;
-			ClipperLib::Paths expanded;
+		
 
-			ClipperLib::ClipperOffset clipper_reducer;
-			ClipperLib::ClipperOffset clipper_expander;
+		auto room_paths = sizeRestrictPaths(source, room_min_width / 2);
 
-			clipper_expander.MiterLimit = 100;
+		auto hall_canidates = subtractPaths(source, room_paths);
 
-			clipper_reducer.AddPaths(source, ClipperLib::jtMiter, ClipperLib::etClosedPolygon);
-			clipper_reducer.Execute(reduced, -room_min_width / 2);
+		auto hall_paths = sizeRestrictPaths(hall_canidates, hall_min_width / 2);
 
-			clipper_expander.AddPaths(reduced, ClipperLib::jtMiter, ClipperLib::etClosedPolygon);
-			clipper_expander.Execute(expanded, room_min_width / 2);
-
-			ClipperLib::Clipper clipper_restriction;
-
-			clipper_restriction.AddPaths(expanded, ClipperLib::ptSubject, true);
-			clipper_restriction.AddPaths(source, ClipperLib::ptClip, true);
-			clipper_restriction.Execute(ClipperLib::ctIntersection, room_ready);
-		}
-
-		ClipperLib::Paths hall_ready;
-		{
-			ClipperLib::Paths reduced;
-			ClipperLib::Paths halls_cleared;
-			ClipperLib::Paths rooms_cleared;
-
-			ClipperLib::ClipperOffset clipper_reducer;
-			ClipperLib::ClipperOffset clipper_expander;
-
-			clipper_expander.MiterLimit = 100;
-
-			clipper_reducer.AddPaths(source, ClipperLib::jtMiter, ClipperLib::etClosedPolygon);
-			clipper_reducer.Execute(reduced, -hall_min_width / 2);
-
-			clipper_expander.AddPaths(reduced, ClipperLib::jtMiter, ClipperLib::etClosedPolygon);
-			clipper_expander.Execute(halls_cleared, hall_min_width / 2);
-
-			ClipperLib::Clipper clipper_subtract;
-
-			clipper_subtract.AddPaths(halls_cleared, ClipperLib::ptSubject, true);
-			clipper_subtract.AddPaths(room_ready, ClipperLib::ptClip, true);
-			clipper_subtract.Execute(ClipperLib::ctDifference, rooms_cleared);
-
-			ClipperLib::Clipper clipper_restriction;
-
-			clipper_restriction.AddPaths(rooms_cleared, ClipperLib::ptSubject, true);
-			clipper_restriction.AddPaths(source, ClipperLib::ptClip, true);
-			clipper_restriction.Execute(ClipperLib::ctIntersection, hall_ready);
-		}
-
-		ClipperLib::PolyTree room_tree;
-		ClipperLib::PolyTree hall_tree;
-		{
-			ClipperLib::Clipper clipper_room;
-			ClipperLib::Clipper clipper_hall;
-
-			clipper_room.AddPaths(room_ready, ClipperLib::ptSubject, true);
-			clipper_hall.AddPaths(hall_ready, ClipperLib::ptSubject, true);
-
-			clipper_room.Execute(ClipperLib::ctUnion, room_tree);
-			clipper_hall.Execute(ClipperLib::ctUnion, hall_tree);
-		}
+		auto room_tree = makeTree(room_paths);
+		auto hall_tree = makeTree(hall_paths);
 
 		FLL<Region *> room_ins;
 		FLL<Region *> room_outs;
 		FLL<Region *> hall_ins;
 		FLL<Region *> hall_outs;
-		FLL<Region *> debug_ins;
-		FLL<Region *> debug_outs;
-
-		//FLL<Pint> debug_input = focus->getRootEdge()->listPoints();
-		//TArray<TArray<Pint>> debug_room_ins;
-		//TArray<TArray<Pint>> debug_room_outs;
-		//TArray<TArray<Pint>> debug_hall_ins;
-		//TArray<TArray<Pint>> debug_hall_outs;
-		//TArray<TArray<Pint>> debug_debug_ins;
-		//TArray<TArray<Pint>> debug_debug_outs;
-
-		UE_LOG(LogTemp, Warning, TEXT(""));
-		UE_LOG(LogTemp, Warning, TEXT("ALLOCATE ROOMS"));
-		UE_LOG(LogTemp, Warning, TEXT(""));
 
 		polytree_utils::AllocateTree(room_tree, focus, room_ins, room_outs);
 
-		//AllocateTree(room_tree, focus, room_ins, room_outs);
+		polytree_utils::AllocateTree(hall_tree, room_outs, hall_ins, hall_outs);
 
-		//for (auto room : room_ins) {
-		//	debug_room_ins.Push(room->getRootEdge()->listPoints());
-		//}
-		//for (auto room : room_outs) {
-		//	debug_room_outs.Push(room->getRootEdge()->listPoints());
-		//}
+		cleaned_nulls.absorb(room_ins);
+		pruned_halls.absorb(hall_ins);
+		pruned_smalls.absorb(hall_outs);
 
-		UE_LOG(LogTemp, Warning, TEXT(""));
-		UE_LOG(LogTemp, Warning, TEXT("ALLOCATE HALLS"));
-		UE_LOG(LogTemp, Warning, TEXT(""));
-
-		AllocateTree(hall_tree, room_outs, hall_ins, hall_outs);
-		
-		//for (auto room : hall_ins) {
-		//	debug_hall_ins.Push(room->getRootEdge()->listPoints());
-		//}
-		//for (auto room : hall_outs) {
-		//	debug_hall_outs.Push(room->getRootEdge()->listPoints());
-		//}
-		
-		if (hall_ins.Num() != hall_tree.ChildCount()) {
-			//F_DCEL system_debug;
-			//Face<Pint>* inner = system_debug.createFace(debug_input);
-
-			UE_LOG(LogTemp, Warning, TEXT(""));
-			UE_LOG(LogTemp, Warning, TEXT("ALLOCATE DEBUG"));
-			UE_LOG(LogTemp, Warning, TEXT(""));
-
-			AllocateTree(room_tree, inner, debug_ins, debug_outs);
-			//for (auto room : debug_ins) {
-			//	debug_debug_ins.Push(room->getRootEdge()->listPoints());
-			//}
-			//for (auto room : debug_outs) {
-			//	debug_debug_outs.Push(room->getRootEdge()->listPoints());
-			//}
-			//check(hall_ins.Num() == hall_tree.ChildCount());
-		}
-
-		//check(room_ins.Num() == room_tree.ChildCount());
-		//check(hall_ins.Num() == hall_tree.ChildCount());
-
-		for (auto null : room_ins) {
-			cleaned_nulls.append(null);
-		}
-		for (auto null : hall_ins) {
-			pruned_halls.append(null);
-		}
-		for (auto null : hall_outs) {
-			pruned_smalls.append(null);
-		}
 	}
 
 	target.Nulls.absorb(cleaned_nulls);
@@ -723,12 +681,7 @@ void cleanNulls(Type_Tracker &target) {
 	target.Smalls.absorb(pruned_smalls);
 
 	mergeGroup(target.Smalls);
-
-	//mergeGroup(target.Nulls);
-	//mergeGroup(target.Halls);
-	//mergeGroup(target.Smalls);
 }
-//allocates a region randomly from the provided nulls, listing interior faces
 
 void mergeSmalls(Type_Tracker &target) {
 	UE_LOG(LogTemp, Warning, TEXT("Merge Smalls\n"));
@@ -739,7 +692,7 @@ void mergeSmalls(Type_Tracker &target) {
 	for (auto small : target.Smalls) {
 		auto local_boundary = toPaths(small);
 		
-		//auto neighbors = small->getNeighbors();
+		FLL<Region *> neighbors = small->getNeighbors();
 
 		Region * best_neighbor = nullptr;
 		float best_area_score = 0;
@@ -752,39 +705,16 @@ void mergeSmalls(Type_Tracker &target) {
 
 
 			auto other_boundary = toPaths(neighbor);
-			ClipperLib::Paths grouping;
-			ClipperLib::Paths reduced;
-			ClipperLib::Paths expanded;
-			ClipperLib::Paths result;
 
-			ClipperLib::Clipper clipper_additive;
-			ClipperLib::ClipperOffset clipper_reducer;
-			ClipperLib::ClipperOffset clipper_expander;
-			ClipperLib::Clipper clipper_intersect;
-
-			clipper_expander.MiterLimit = 100;
-
-			clipper_additive.AddPath(other_boundary, ClipperLib::ptSubject, true);
-			clipper_additive.AddPath(local_boundary, ClipperLib::ptSubject, true);
-			clipper_additive.Execute(ClipperLib::ctUnion, grouping);
-
-			clipper_reducer.AddPaths(grouping, ClipperLib::jtMiter, ClipperLib::etClosedPolygon);
-			clipper_reducer.Execute(reduced, -room_min_width / 2);
-
-			clipper_expander.AddPaths(reduced, ClipperLib::jtMiter, ClipperLib::etClosedPolygon);
-			clipper_expander.Execute(expanded, room_min_width / 2);
-
-			clipper_intersect.AddPath(local_boundary, ClipperLib::ptSubject, true);
-			clipper_intersect.AddPaths(expanded, ClipperLib::ptClip, true);
-			clipper_intersect.Execute(ClipperLib::ctIntersection, result);
+			auto grouping = addPaths(other_boundary, local_boundary);
+			auto result = sizeRestrictPaths(grouping, room_min_width / 2);
 
 			if (result.size() > 0) {
 				float area_score = ClipperLib::Area(result[0]);
 				if (area_score > best_area_score) {
 					best_area_score = area_score;
 					best_neighbor = neighbor;
-					best_tree.Clear();
-					clipper_intersect.Execute(ClipperLib::ctIntersection, best_tree);
+					best_tree = makeTree(result);
 				}
 			}
 		}
@@ -805,7 +735,7 @@ void mergeSmalls(Type_Tracker &target) {
 		}
 	}
 }
-
+/*
 FLL<Pint> choosePointsNear(Region const & target, int count, rto offset){
 	//pick n points AWAY from the polygon
 	//get center offsets of each face
@@ -857,7 +787,7 @@ FLL<Pint> choosePointsNear(Region const & target, int count, rto offset){
 	//for each edge, offset it and get the nearest point, tracking the best fit
 	return seeds;
 }
-/*
+
 struct HallwayPrototype {
 	HallwayPrototype* parent;
 	int parent_generation;
