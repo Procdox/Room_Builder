@@ -187,6 +187,15 @@ public:
 
 		length++;
 	}
+	void append(FLL<_T> reference) {
+		FLL_node * focus = reference.head;
+
+		while (focus != nullptr) {
+			append(focus->value);
+
+			focus = focus->next;
+		}
+	}
 
 	//returns the element at head, undefined behavior if empty
 	_T pop() {

@@ -435,7 +435,7 @@ public:
 		do {
 			focus->root = root;
 			focus = focus->inv->next;
-		} while (focus != next);
+		} while (focus != inv);
 
 		root->root = next;
 
@@ -445,7 +445,15 @@ public:
 		inv->next->last = inv->last;
 		inv->last->next = inv->next;
 
+		if (loop->root == this) {
+			loop->root = next;
+		}
+		if (inv->loop->root == inv) {
+			inv->loop->root = inv->last;
+		}
+
 		universe->removePoint(inv->root);
+		universe->removeEdge(this);
 	}
 
 };

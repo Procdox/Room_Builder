@@ -19,6 +19,10 @@ ClipperLib::Path toPath(FLL<Pint> const &target) {
 
 }
 
+ClipperLib::Paths toPaths(Region const * target) {
+
+}
+
 FLL<Pint> fromPath(ClipperLib::Path const &target) {
 
 }
@@ -77,7 +81,7 @@ Pint boxUniformPoint(PBox const & box, int divisions = 100) {
 	return Pint(X, Y) * box.getExtent() + box.getCenter();
 }
 
-PBox getBounds(Face<Pint> const * target) {
+PBox getBounds(Region const * target) {
 	PBox result;
 
 	auto boundary = target->getLoopPoints();
@@ -428,8 +432,8 @@ void Aroom_description_builder::Create_Floor_Ceiling_New(Region const & source, 
 }
 void Aroom_description_builder::Create_Wall_Sections_New(Region const & source, float bottom, float top) {
 
-	for(auto border : source.getBounds()) {
-		auto border_points = border->getValue()->getLoopPoints();
+	for(auto border : *source.getBounds()) {
+		auto border_points = border->getLoopPoints();
 
 		Draw_Border(toFVector(border_points), 50, GetWorld());
 
@@ -438,7 +442,7 @@ void Aroom_description_builder::Create_Wall_Sections_New(Region const & source, 
 
 		for (auto next : border_points) {
 
-			CreateDoor(last->getValue(), next->getValue(), bottom, top);
+			CreateDoor(last, next, bottom, top);
 
 			last = next;
 		}
@@ -466,28 +470,28 @@ struct Type_Tracker {
 	void display(const UWorld* world) {
 		int p = 0;
 		for (auto small : Smalls) {
-			small->cleanBorder();
-			for(auto border : small->getBounds())
+			small->clean();
+			for(auto border : *small->getBounds())
 				Draw_Border(toFVector(border->getLoopPoints()), 72, world, color_Pnk);
 		}
 
 		for (auto room : Rooms) {
-			room->cleanBorder();
+			room->clean();
 			//Create_Floor_Ceiling_New(room, 0, 200);
 			//Create_Wall_Sections_New(room, 0, 200, h);
-			for (auto border : small->getBounds())
+			for (auto border : *room->getBounds())
 				Draw_Border(toFVector(border->getLoopPoints()), 70, world, color_blue);
 		}
 
 		for (auto null : Nulls) {
-			null->cleanBorder();
-			for (auto border : small->getBounds())
+			null->clean();
+			for (auto border : *null->getBounds())
 				Draw_Border(toFVector(border->getLoopPoints()), 65, world, color_red);
 		}
 
 		for (auto hall : Halls) {
-			hall->cleanBorder();
-			for (auto border : small->getBounds())
+			hall->clean();
+			for (auto border : *hall->getBounds())
 				Draw_Border(toFVector(border->getLoopPoints()), 74, world, color_green);
 		}
 	}
@@ -498,16 +502,16 @@ struct Type_Tracker {
 	//}
 };
 
-bool Cull_Suggested(Face<Pint>* target, FLL<Face<Pint> *> &results, FLL<Face<Pint> *> &nulls) {
+bool Cull_Suggested(Region * target, FLL<Region *> &results, FLL<Region *> &nulls) {
 	UE_LOG(LogTemp, Warning, TEXT("Culling\n"));
 
 	ClipperLib::Paths reduced;
-	FLL<Face<Pint> *> rooms;
-	FLL<Face<Pint> *> outers;
+	FLL<Region *> rooms;
+	FLL<Region*> outers;
 
 	{
 
-		ClipperLib::Paths source = to_Paths(target);
+		ClipperLib::Paths source = toPaths(target);
 		ClipperLib::ClipperOffset clipper_reducer;
 
 
@@ -516,15 +520,15 @@ bool Cull_Suggested(Face<Pint>* target, FLL<Face<Pint> *> &results, FLL<Face<Pin
 	}
 
 	if (reduced.size() < 1) {
-		nulls.Push(target);
+		nulls.append(target);
 		return false;
 	}
 
-	outers.Push(target);
+	outers.append(target);
 
 	//IF THE ROOM HAS ANY HOLES WE'RE FUCKED
 	for (auto section : reduced) {
-		FLL<Face<Pint> *> created_outers;
+		FLL<Region *> created_outers;
 
 		ClipperLib::PolyTree rooms_tree;
 		ClipperLib::ClipperOffset clipper_expander;
@@ -533,17 +537,13 @@ bool Cull_Suggested(Face<Pint>* target, FLL<Face<Pint> *> &results, FLL<Face<Pin
 		clipper_expander.AddPath(section, ClipperLib::jtMiter, ClipperLib::etClosedPolygon);
 		clipper_expander.Execute(rooms_tree, room_min_width / 2);
 
-		AllocateTree(rooms_tree, outers, rooms, created_outers);
+		polytree_utils::AllocateTree(rooms_tree, outers, rooms, created_outers);
 
 		outers = created_outers;
 	}
 
-	for (auto null : outers) {
-		nulls.Push(null);
-	}
-	for (auto room : rooms) {
-		results.Push(room);
-	}
+	nulls.append(outers);
+	results.append(rooms);
 
 	return true;
 }
@@ -576,7 +576,7 @@ void cleanNulls(Type_Tracker &target) {
 	FLL<Region *> pruned_smalls;
 
 	for (auto focus : input_nulls) {
-		ClipperLib::Paths source = to_Paths(focus);
+		ClipperLib::Paths source = toPaths(focus);
 		ClipperLib::Paths room_ready;
 		{
 			ClipperLib::Paths reduced;
@@ -650,27 +650,28 @@ void cleanNulls(Type_Tracker &target) {
 		FLL<Region *> debug_ins;
 		FLL<Region *> debug_outs;
 
-		FLL<Pint> debug_input = focus->getRootEdge()->listPoints();
-		TArray<TArray<Pint>> debug_room_ins;
-		TArray<TArray<Pint>> debug_room_outs;
-		TArray<TArray<Pint>> debug_hall_ins;
-		TArray<TArray<Pint>> debug_hall_outs;
-		TArray<TArray<Pint>> debug_debug_ins;
-		TArray<TArray<Pint>> debug_debug_outs;
+		//FLL<Pint> debug_input = focus->getRootEdge()->listPoints();
+		//TArray<TArray<Pint>> debug_room_ins;
+		//TArray<TArray<Pint>> debug_room_outs;
+		//TArray<TArray<Pint>> debug_hall_ins;
+		//TArray<TArray<Pint>> debug_hall_outs;
+		//TArray<TArray<Pint>> debug_debug_ins;
+		//TArray<TArray<Pint>> debug_debug_outs;
 
 		UE_LOG(LogTemp, Warning, TEXT(""));
 		UE_LOG(LogTemp, Warning, TEXT("ALLOCATE ROOMS"));
 		UE_LOG(LogTemp, Warning, TEXT(""));
 
+		polytree_utils::AllocateTree(room_tree, focus, room_ins, room_outs);
 
-		AllocateTree(room_tree, focus, room_ins, room_outs);
+		//AllocateTree(room_tree, focus, room_ins, room_outs);
 
-		for (auto room : room_ins) {
-			debug_room_ins.Push(room->getRootEdge()->listPoints());
-		}
-		for (auto room : room_outs) {
-			debug_room_outs.Push(room->getRootEdge()->listPoints());
-		}
+		//for (auto room : room_ins) {
+		//	debug_room_ins.Push(room->getRootEdge()->listPoints());
+		//}
+		//for (auto room : room_outs) {
+		//	debug_room_outs.Push(room->getRootEdge()->listPoints());
+		//}
 
 		UE_LOG(LogTemp, Warning, TEXT(""));
 		UE_LOG(LogTemp, Warning, TEXT("ALLOCATE HALLS"));
@@ -678,28 +679,28 @@ void cleanNulls(Type_Tracker &target) {
 
 		AllocateTree(hall_tree, room_outs, hall_ins, hall_outs);
 		
-		for (auto room : hall_ins) {
-			debug_hall_ins.Push(room->getRootEdge()->listPoints());
-		}
-		for (auto room : hall_outs) {
-			debug_hall_outs.Push(room->getRootEdge()->listPoints());
-		}
+		//for (auto room : hall_ins) {
+		//	debug_hall_ins.Push(room->getRootEdge()->listPoints());
+		//}
+		//for (auto room : hall_outs) {
+		//	debug_hall_outs.Push(room->getRootEdge()->listPoints());
+		//}
 		
 		if (hall_ins.Num() != hall_tree.ChildCount()) {
-			F_DCEL system_debug;
-			Face<Pint>* inner = system_debug.createFace(debug_input);
+			//F_DCEL system_debug;
+			//Face<Pint>* inner = system_debug.createFace(debug_input);
 
 			UE_LOG(LogTemp, Warning, TEXT(""));
 			UE_LOG(LogTemp, Warning, TEXT("ALLOCATE DEBUG"));
 			UE_LOG(LogTemp, Warning, TEXT(""));
 
 			AllocateTree(room_tree, inner, debug_ins, debug_outs);
-			for (auto room : debug_ins) {
-				debug_debug_ins.Push(room->getRootEdge()->listPoints());
-			}
-			for (auto room : debug_outs) {
-				debug_debug_outs.Push(room->getRootEdge()->listPoints());
-			}
+			//for (auto room : debug_ins) {
+			//	debug_debug_ins.Push(room->getRootEdge()->listPoints());
+			//}
+			//for (auto room : debug_outs) {
+			//	debug_debug_outs.Push(room->getRootEdge()->listPoints());
+			//}
 			//check(hall_ins.Num() == hall_tree.ChildCount());
 		}
 
@@ -735,12 +736,12 @@ void mergeSmalls(Type_Tracker &target) {
 	//for connected room
 	//union the borders, reduce, and intersect with small
 	//choose room with greatest area 
-	for (int ii = 0; ii < target.Smalls.Num(); ii++) {
-		auto local_boundary = to_Path(target.Smalls[ii]->getRootEdge()->listPoints());
+	for (auto small : target.Smalls) {
+		auto local_boundary = toPaths(small);
 		
-		auto neighbors = target.Smalls[ii]->getNeighbors();
+		//auto neighbors = small->getNeighbors();
 
-		Face<Pint>* best_neighbor = nullptr;
+		Region * best_neighbor = nullptr;
 		float best_area_score = 0;
 		ClipperLib::PolyTree best_tree;
 
@@ -750,7 +751,7 @@ void mergeSmalls(Type_Tracker &target) {
 			}
 
 
-			auto other_boundary = to_Path(neighbor->getRootEdge()->listPoints());
+			auto other_boundary = toPaths(neighbor);
 			ClipperLib::Paths grouping;
 			ClipperLib::Paths reduced;
 			ClipperLib::Paths expanded;
@@ -789,78 +790,68 @@ void mergeSmalls(Type_Tracker &target) {
 		}
 
 		if (best_neighbor != nullptr) {
-			FLL<Face<Pint> *> ins;
-			FLL<Face<Pint> *> outs;
+			FLL<Region *> ins;
+			FLL<Region *> outs;
 
-			AllocateTree(best_tree, target.Smalls[ii], ins, outs);
-
-			check(ins.Num() > 0);
+			
+			polytree_utils::AllocateTree(best_tree, small, ins, outs);
 
 			for (auto in : ins) {
-				best_neighbor->mergeWithFace(in);
+				best_neighbor->merge(in);
 			}
 
-			target.Smalls.RemoveAt(ii--);
-			target.Smalls.Append(outs);
+			target.Smalls.remove(small);
+			target.Smalls.append(outs);
 		}
 	}
 }
 
-TArray<_P> choosePointsNear(const Face<Pint> &target, int count, int offset){
+FLL<Pint> choosePointsNear(Region const & target, int count, rto offset){
 	//pick n points AWAY from the polygon
 	//get center offsets of each face
+	
 	auto bounds = getBounds(&target);
 	auto extent = bounds.getExtent();
 	auto center = bounds.getCenter();
-	auto size = 2 * FMath::Max(extent.X, extent.Y);
+	
+	rto size = 2;
 
-	auto segments = target.getRootEdge()->listPoints();
-	auto segment_size = segments.Num();
+	if (extent.X > extent.Y) {
+		size *= extent.X;
+	}
+	else {
+		size *= extent.Y;
+	}
 
-	TArray<_P> seeds;
+	auto segments = target.getLoopPoints();
+
+	FLL<Pint> seeds;
 	for (int ii = 0; ii < count; ii++) {
-		_P seed = circularUniformPoint(size);
+		Pint seed = circularUniformPoint(size);
 		seed.X += center.X;
 		seed.Y += center.Y;
+
 		//seeds.Push(seed);
 
-		_P best(0,0);
+		Pint best(0,0);
 		float best_score = FLT_MAX;
 
-		for (int jj = 0; jj < segment_size; jj++) {
-			_P A = segments[jj];
-			_P B = segments[(jj + 1) % segment_size];
+		for (auto focus = segments.begin(); focus != segments.end(); ++focus) {
+			Pint A = *focus;
+			Pint B = *(focus.cyclic_next());
 			
-			_P AB = B - A;
-			_P AP = seed - A;
+			Pint AB = B - A;
+			Pint AP = seed - A;
 
-			int segments;
-			_P step = AB.decompose(segments);
-			_P tangent(-step.Y, step.X);
+			rto length = AB.SizeSquared();
+			rto dot = (AP.X * AB.X + AP.Y * AB.Y);
 
-			int length = AB.SizeSquared();
-			int t = (AP.X * AB.X + AP.Y * AB.Y);
+			rto t = dot / length;
 
-			_P point;
-			if (t > length) {
-				point = B;
-			}
-			else if (t < 0) {
-				point = A;
-			}
-			else if (t % length == 0) {
-				int count = (float)segments * ((float)t / (float)length);
-				point = A + step * count + tangent;
-			}
-
-			int score = (point - seed).SizeSquared();
-			if (score < best_score) {
-				best_score = score;
-				best = point;
-			}
+			Pint point = AB * t + A;
 		}
 
-		seeds.Push(best);
+		seeds.append(best);
 	}
 
 	//for each edge, offset it and get the nearest point, tracking the best fit
@@ -1078,73 +1069,57 @@ FLL<Pint> Pick_Generator(rto x, rto y, Pint center) {
 
 //}
 
-bool createRoomAtPoint(Type_Tracker &system_types, const _P &point, int scale = 1, FLL<Face<Pint> *> *created = nullptr) {
+bool createRoomAtPoint(Type_Tracker &system_types, const Pint &point, int scale = 1, FLL<Region *> * created = nullptr) {
 	UE_LOG(LogTemp, Warning, TEXT("Create Room At Point\n"));
-	FLL<Face<Pint> *> created_rooms;
-	FLL<Face<Pint> *> created_nulls;
-	FLL<Face<Pint> *> raw_faces;
+	FLL<Region *> created_rooms;
+	FLL<Region *> created_nulls;
+	FLL<Region *> raw_faces;
 	
-	int null_index = -1;
+	Region * choice = nullptr;
 
 	//find containing null
-	for (int ii = 0; ii < system_types.Nulls.Num(); ii++) {
-		if (system_types.Nulls[ii]->contains(point)) {
-			null_index = ii;
+	for (auto null : system_types.Nulls) {
+		if (null->contains(point).type != FaceRelationType::point_exterior) {
+			choice = null;
 			break;
 		}
 	}
 
-	if (null_index < 0) {
+	if (choice == nullptr) {
 		return false;
 	}
 
-	auto chosen_null = system_types.Nulls[null_index];
-	system_types.Nulls.RemoveAt(null_index);
+	system_types.Nulls.remove(choice);
 
 	int area = FMath::RandRange(6, 14);
 	int width = FMath::RandRange(2, area / 2);
 	int length = area / width;
 
-	auto bounds = Pick_Generator(width*grid_coef*scale, length*grid_coef*scale, point);
+	auto bounds = Pick_Generator(width * scale, length * scale, point);
 
 	//cull to null region
-	if (!chosen_null->subAllocateFace(bounds, raw_faces, created_nulls)) {
-		system_types.Nulls.Push(chosen_null);
-	}
-	for (auto null : raw_faces) {
-		check(null->getDad() != NULL);
-	}
-	for (auto null : created_nulls) {
-		check(null->getDad() != NULL);
-	}
+	subAllocate(choice, bounds, created_nulls, raw_faces);
 
 	//remerge rejected regions with nulls
-	for (int jj = 0; jj < raw_faces.Num(); jj++) {
-		Cull_Suggested(raw_faces[jj], created_rooms, created_nulls);
-
-		for (auto null : created_nulls) {
-			check(null->getRootEdge() != NULL);
-		}
-
-		mergeGroup(created_nulls);
+	for (auto face : raw_faces) {
+		Cull_Suggested(face, created_rooms, created_nulls);
 	}
 
-	for (auto null : created_nulls) {
-		check(null->getRootEdge() != NULL);
-		system_types.Nulls.Push(null);
-	}
+	system_types.Nulls.absorb(created_nulls);
 
 	cleanNulls(system_types);
 	
-	system_types.Rooms.Append(created_rooms);
 	if (created != nullptr) {
-		created->Append(created_rooms);
+		created->append(created_rooms);
 	}
-	return created_rooms.Num() > 0;
+
+	system_types.Rooms.absorb(created_rooms);
+
+	return !created_rooms.empty();
 }
 
 //attempts to create rooms distributed evenly across the space
-bool createDistributedRooms(Type_Tracker &system_types, const int attempts_per_cell = 5, int scale = 1, FLL<Face<Pint> *> *created = nullptr) {
+bool createDistributedRooms(Type_Tracker &system_types, const int attempts_per_cell = 5, int scale = 1, FLL<Region *> *created = nullptr) {
 	//GRID METHOD
 	//from a grid, for each grid point we select a point within a tolerance radius
 	//choose a grid
@@ -1157,17 +1132,17 @@ bool createDistributedRooms(Type_Tracker &system_types, const int attempts_per_c
 #define grid_height 10
 #define tolerance 4
 
-	_P offset = boxUniformPoint(grid_width, grid_height);
-	_P skew = boxUniformPoint(grid_width, grid_height);
+	Pint offset = boxUniformPoint(grid_width, grid_height);
+	Pint skew = boxUniformPoint(grid_width, grid_height);
 
 	for (int xx = -5; xx <= 5; xx++) {
 		for (int yy = -5; yy <= 5; yy++) {
 			//test a couple points until we find one in the space
 			int safety = attempts_per_cell;
-			_P grid = _P(xx * grid_width, yy * grid_height) + offset + _P(skew.X*yy, skew.Y*xx);
+			Pint grid = Pint(xx * grid_width, yy * grid_height) + offset + Pint(skew.X*yy, skew.Y*xx);
 
 			do {
-				_P choice = circularUniformPoint(tolerance) + grid;
+				Pint choice = circularUniformPoint(tolerance) + grid;
 				choice *= 100.f;
 				//choice.toGrid(100.f);
 
@@ -1187,26 +1162,28 @@ bool createDistributedRooms(Type_Tracker &system_types, const int attempts_per_c
 	//_P choice = circularUniformPoint();
 }
 
-bool fillNullSpace(Type_Tracker &system_types, int safety = 100, int scale = 1, FLL<Face<Pint> *> *created = nullptr) {
-	while (system_types.Nulls.Num() > 0 && (safety--) > 0) {
-		auto bounds = getBounds(system_types.Nulls[0]);
+bool fillNullSpace(Type_Tracker &system_types, int safety = 100, int scale = 1, FLL<Region *> *created = nullptr) {
+	while (!system_types.Nulls.empty() && (safety--) > 0) {
+
+		auto bounds = getBounds(system_types.Nulls.last());
+
 		auto choice = boxUniformPoint(bounds);
-		//choice.toGrid(100.f);
+
 		createRoomAtPoint(system_types, choice, scale, created);
 	}
 	return true;
 }
 
-bool createNearRooms(Type_Tracker &system_types, Face<Pint> &target, int attempts = 10, int scale = 1, FLL<Face<Pint> *> *created = nullptr, const UWorld* ref = nullptr) {
+bool createNearRooms(Type_Tracker &system_types, Region * target, int attempts = 10, int scale = 1, FLL<Region *> *created = nullptr, const UWorld* ref = nullptr) {
 	
 	//auto seeds = choosePointsNear(target, 3 * attempts, 4);
 
-	auto bounds = getBounds(&target);
+	auto bounds = getBounds(target);
 
 	attempts = attempts * 3;
 	while (attempts > 0) {
 
-		auto seed = boxUniformPoint(4, 4)*grid_coef;
+		auto seed = boxUniformPoint(4, 4);
 		if (seed.X > 0) {
 			seed.X += bounds.Max.X;
 		}
@@ -1223,8 +1200,8 @@ bool createNearRooms(Type_Tracker &system_types, Face<Pint> &target, int attempt
 		if (ref) {
 			DrawDebugLine(
 				ref,
-				FVector(seed.X * 10 / grid_coef, seed.Y * 10 / grid_coef, 70),
-				FVector(seed.X * 10 / grid_coef, seed.Y * 10 / grid_coef, 80),
+				FVector(convert(seed) * 10, 70),
+				FVector(convert(seed) * 10, 80),
 				//FColor(FMath::RandRange(0,255), FMath::RandRange(0, 255), FMath::RandRange(0, 255)),
 				color_Pnk,
 				true,
@@ -1250,7 +1227,7 @@ bool createNearRooms(Type_Tracker &system_types, Face<Pint> &target, int attempt
 	return true;
 }
 
-bool createLinkingHalls(Face<Pint>* target, FLL<Face<Pint> *> &nulls, FLL<Face<Pint> *> &created_faces) {
+bool createLinkingHalls(Region * target, FLL<Region *> &nulls, FLL<Region *> &created_faces) {
 	//tries to generate a set of halls linking two target faces
 
 	return true;
@@ -1285,7 +1262,7 @@ void create_Layout(Type_Tracker &system_types, int large, int medium, int small,
 		//pick point
 		auto point = boxUniformPoint(80,80) -Pint(40, 40);
 		//point.toGrid(P_micro_grid);
-		FLL<Face<Pint> *> temp_created;
+		FLL<Region *> temp_created;
 		if (createRoomAtPoint(system_types, point, 7, &temp_created)) { //FMath::RandRange(6, 10)
 			for (auto room : temp_created) {
 				larges.Push(new building_region(0, room));
@@ -1303,16 +1280,16 @@ void create_Layout(Type_Tracker &system_types, int large, int medium, int small,
 
 	for (auto region : larges) {
 		//creates some MEDIUMS
-		FLL<Face<Pint> *> temp_created;
-		createNearRooms(system_types, *region->region, medium, 5, &temp_created, ref);
+		FLL<Region *> temp_created;
+		createNearRooms(system_types, region->region, medium, 5, &temp_created, ref);
 		for (auto room : temp_created) {
 			mediums.Push(new building_region(1, room, region));
 		}
 	}
 	for (auto region : mediums) {
 		//creates some MEDIUMS
-		FLL<Face<Pint> *> temp_created;
-		createNearRooms(system_types, *region->region, small, 4, &temp_created, ref);
+		FLL<Region *> temp_created;
+		createNearRooms(system_types, region->region, small, 4, &temp_created, ref);
 		for (auto room : temp_created) {
 			smalls.Push(new building_region(2, room, region));
 		}
