@@ -6,8 +6,7 @@
 #include "GameFramework/Actor.h"
 #include "ProceduralMeshComponent.h"
 #include "../ThirdParty/ClipperLib/Includes/ClipperLib.h"
-#include "../ThirdParty/DCEL_CUTS/Includes/DCEL_Region.h"
-//#include "DCEL.h"
+#include "../ThirdParty/DCEL_CUTS/Includes/Ratio_Region.h"
 #include "room_description_builder.generated.h"
 
 USTRUCT()

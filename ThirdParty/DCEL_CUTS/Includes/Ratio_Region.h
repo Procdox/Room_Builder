@@ -1,6 +1,6 @@
 #pragma once
-#include "DCEL_point.h"
-#include "DCEL_types.h"
+#include "Ratio_Point.h"
+#include "DCEL.h"
 
 /*
 

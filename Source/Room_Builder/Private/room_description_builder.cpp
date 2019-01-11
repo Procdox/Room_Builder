@@ -16,19 +16,52 @@ FVector2D convert(Pint const &target) {
 }
 
 ClipperLib::Path toPath(FLL<Pint> const &target) {
-
+	ClipperLib::Path product;
+	for (auto point : target) {
+		product.push_back(ClipperLib::IntPoint(point.X.toFloat() * 1000, point.Y.toFloat() * 1000));
+	}
+	return product;
 }
 
-ClipperLib::Paths toPaths(Region<Pint> const * target) {
+ClipperLib::Paths toPaths(Region<Pint> * target) {
+	ClipperLib::Paths product;
 
+	for (auto border : target->getBounds()) {
+		product.push_back(toPath(border->getLoopPoints()));
+	}
+
+	return product;
 }
 
-FLL<Pint> fromPath(ClipperLib::Path const &target) {
+FLL<Pint> fromPath(ClipperLib::Path const &target, FLL<Pint> const &suggestions) {
+	FLL<Pint> product;
+	for (auto point : target) {
+		Pint raw(point.X, point.Y);
+		raw /= 1000;
 
+		rto best_distance = 1;
+		Pint choice = raw;
+		for (auto compare : suggestions) {
+			rto size = (raw - compare).SizeSquared();
+			if (size < best_distance) {
+				choice = compare;
+				best_distance = size;
+			}
+		}
+
+		product.append(Pint(point.X, point.Y) / 1000);
+	}
+	return product;
 }
 
 TArray<FVector2D> toFVector(FLL<Pint> const &target) {
+	TArray<FVector2D> product;
 
+	for (auto point : target) {
+		product.Push(FVector2D(point.X.toFloat(), point.Y.toFloat()));
+	}
+
+	return product;
 }
 
 //==========================================================================================================
@@ -114,9 +147,9 @@ namespace polytree_utils
 {
 	using namespace ClipperLib;
 
-	void AllocateNode(PolyNode * ref, FLL<Region<Pint> *> targets, FLL<Region<Pint> *> &ins, FLL<Region<Pint> *> &outs) {
+	void AllocateNode(PolyNode * ref, FLL<Region<Pint> *> targets, FLL<Region<Pint> *> &ins, FLL<Region<Pint> *> &outs, FLL<Pint> const &suggestions) {
 
-		auto contour = fromPath(ref->Contour);
+		auto contour = fromPath(ref->Contour, suggestions);
 
 		FLL<Region<Pint> *> relative_outs;
 		FLL<Region<Pint> *> relative_ins;
@@ -128,7 +161,7 @@ namespace polytree_utils
 		for (auto outer : ref->Childs) {
 			FLL<Region<Pint> *> novel_ins;
 
-			AllocateNode(outer, relative_ins, outs, novel_ins);
+			AllocateNode(outer, relative_ins, outs, novel_ins, suggestions);
 
 			relative_ins.clear();
 			relative_ins.absorb(novel_ins);
@@ -139,10 +172,18 @@ namespace polytree_utils
 
 	void AllocateTree(PolyTree & ref, FLL<Region<Pint> *> targets, FLL<Region<Pint> *> &ins, FLL<Region<Pint> *> &outs) {
 
+		FLL<Pint> suggestions;
+		for (auto target : targets) {
+			for (auto border : target->getBounds()) {
+				auto points = border->getLoopPoints();
+				suggestions.absorb(points);
+			}
+		}
+
 		for (auto outer : ref.Childs) {
 			FLL<Region<Pint> *> novel_outs;
 
-			AllocateNode(outer, targets, ins, novel_outs);
+			AllocateNode(outer, targets, ins, novel_outs, suggestions);
 
 			targets.clear();
 			targets.absorb(novel_outs);
@@ -273,6 +314,71 @@ namespace tri_utils
 	}
 
 }
+
+//==========================================================================================================
+//==================================== clipper utilities ===================================================
+//==========================================================================================================
+
+void makeTree(ClipperLib::Paths &source, ClipperLib::PolyTree & result) {
+	result.Clear();
+
+	ClipperLib::Clipper clip;
+
+	clip.AddPaths(source, ClipperLib::ptSubject, true);
+
+	clip.Execute(ClipperLib::ctUnion, result);
+}
+
+ClipperLib::Paths sizeRestrictPaths(ClipperLib::Paths &source, int radius) {
+	ClipperLib::Paths result;
+
+	ClipperLib::Paths reduced;
+	ClipperLib::Paths expanded;
+
+	ClipperLib::ClipperOffset clipper_reducer;
+	ClipperLib::ClipperOffset clipper_expander;
+
+	clipper_expander.MiterLimit = 100;
+
+	clipper_reducer.AddPaths(source, ClipperLib::jtMiter, ClipperLib::etClosedPolygon);
+	clipper_reducer.Execute(reduced, -radius);
+
+	clipper_expander.AddPaths(reduced, ClipperLib::jtMiter, ClipperLib::etClosedPolygon);
+	clipper_expander.Execute(expanded, radius);
+
+	ClipperLib::Clipper clipper_restriction;
+
+	clipper_restriction.AddPaths(expanded, ClipperLib::ptSubject, true);
+	clipper_restriction.AddPaths(source, ClipperLib::ptClip, true);
+	clipper_restriction.Execute(ClipperLib::ctIntersection, result);
+
+	return result;
+}
+
+ClipperLib::Paths addPaths(ClipperLib::Paths &source, ClipperLib::Paths &add) {
+	ClipperLib::Paths result;
+
+	ClipperLib::Clipper clip;
+
+	clip.AddPaths(source, ClipperLib::ptSubject, true);
+	clip.AddPaths(add, ClipperLib::ptClip, true);
+	clip.Execute(ClipperLib::ctUnion, result);
+
+	return result;
+}
+
+ClipperLib::Paths subtractPaths(ClipperLib::Paths &source, ClipperLib::Paths &sub) {
+	ClipperLib::Paths result;
+
+	ClipperLib::Clipper clip;
+
+	clip.AddPaths(source, ClipperLib::ptSubject, true);
+	clip.AddPaths(sub, ClipperLib::ptClip, true);
+	clip.Execute(ClipperLib::ctDifference, result);
+
+	return result;
+}
+
 
 //==========================================================================================================
 //======================================== creation ========================================================
@@ -516,42 +622,21 @@ struct Type_Tracker {
 bool Cull_Suggested(Region<Pint> * target, FLL<Region<Pint> *> &results, FLL<Region<Pint> *> &nulls) {
 	UE_LOG(LogTemp, Warning, TEXT("Culling\n"));
 
-	ClipperLib::Paths reduced;
 	FLL<Region<Pint> *> rooms;
 	FLL<Region<Pint>*> outers;
 
-	{
+	ClipperLib::Paths source = toPaths(target);
+	auto restricted = sizeRestrictPaths(source, room_min_width / 2);
 
-		ClipperLib::Paths source = toPaths(target);
-		ClipperLib::ClipperOffset clipper_reducer;
-
-
-		clipper_reducer.AddPaths(source, ClipperLib::jtMiter, ClipperLib::etClosedPolygon);
-		clipper_reducer.Execute(reduced, -room_min_width / 2);
-	}
-
-	if (reduced.size() < 1) {
+	if (restricted.size() < 1) {
 		nulls.append(target);
 		return false;
 	}
 
-	outers.append(target);
+	ClipperLib::PolyTree rooms_tree;
+	makeTree(restricted, rooms_tree);
 
-	//IF THE ROOM HAS ANY HOLES WE'RE FUCKED
-	for (auto section : reduced) {
-		FLL<Region<Pint> *> created_outers;
-
-		ClipperLib::PolyTree rooms_tree;
-		ClipperLib::ClipperOffset clipper_expander;
-		clipper_expander.MiterLimit = 100;
-
-		clipper_expander.AddPath(section, ClipperLib::jtMiter, ClipperLib::etClosedPolygon);
-		clipper_expander.Execute(rooms_tree, room_min_width / 2);
-
-		polytree_utils::AllocateTree(rooms_tree, outers, rooms, created_outers);
-
-		outers = created_outers;
-	}
+	polytree_utils::AllocateTree(rooms_tree, target, rooms, outers);
 
 	nulls.append(outers);
 	results.append(rooms);
@@ -574,68 +659,6 @@ void mergeGroup(FLL<Region<Pint> *> & nulls) {
 	}
 }
 
-ClipperLib::PolyTree makeTree(ClipperLib::Paths &source) {
-	ClipperLib::PolyTree result;
-
-	ClipperLib::Clipper clip;
-
-	clip.AddPaths(source, ClipperLib::ptSubject, true);
-
-	clip.Execute(ClipperLib::ctUnion, result);
-}
-
-ClipperLib::Paths sizeRestrictPaths(ClipperLib::Paths &source, int radius) {
-	ClipperLib::Paths result;
-
-	ClipperLib::Paths reduced;
-	ClipperLib::Paths expanded;
-
-	ClipperLib::ClipperOffset clipper_reducer;
-	ClipperLib::ClipperOffset clipper_expander;
-
-	clipper_expander.MiterLimit = 100;
-
-	clipper_reducer.AddPaths(source, ClipperLib::jtMiter, ClipperLib::etClosedPolygon);
-	clipper_reducer.Execute(reduced, -radius);
-
-	clipper_expander.AddPaths(reduced, ClipperLib::jtMiter, ClipperLib::etClosedPolygon);
-	clipper_expander.Execute(expanded, radius);
-
-	ClipperLib::Clipper clipper_restriction;
-
-	clipper_restriction.AddPaths(expanded, ClipperLib::ptSubject, true);
-	clipper_restriction.AddPaths(source, ClipperLib::ptClip, true);
-	clipper_restriction.Execute(ClipperLib::ctIntersection, result);
-
-	return result;
-}
-
-ClipperLib::Paths addPaths(ClipperLib::Paths &source, ClipperLib::Paths &add) {
-	ClipperLib::Paths result;
-
-	ClipperLib::Clipper clip;
-
-	clip.AddPaths(source, ClipperLib::ptSubject, true);
-	clip.AddPaths(add, ClipperLib::ptClip, true);
-	clip.Execute(ClipperLib::ctUnion, result);
-
-	return result;
-}
-
-ClipperLib::Paths subtractPaths(ClipperLib::Paths &source, ClipperLib::Paths &sub) {
-	ClipperLib::Paths result;
-
-	ClipperLib::Clipper clip;
-
-	clip.AddPaths(source, ClipperLib::ptSubject, true);
-	clip.AddPaths(sub, ClipperLib::ptClip, true);
-	clip.Execute(ClipperLib::ctDifference, result);
-
-	return result;
-}
-
-
-
 void cleanNulls(Type_Tracker &target) {
 	UE_LOG(LogTemp, Warning, TEXT("Clean Nulls\n"));
 
@@ -651,7 +674,6 @@ void cleanNulls(Type_Tracker &target) {
 
 	for (auto focus : input_nulls) {
 		ClipperLib::Paths source = toPaths(focus);
-		
 
 		auto room_paths = sizeRestrictPaths(source, room_min_width / 2);
 
@@ -659,8 +681,10 @@ void cleanNulls(Type_Tracker &target) {
 
 		auto hall_paths = sizeRestrictPaths(hall_canidates, hall_min_width / 2);
 
-		auto room_tree = makeTree(room_paths);
-		auto hall_tree = makeTree(hall_paths);
+		ClipperLib::PolyTree room_tree;
+		ClipperLib::PolyTree hall_tree;
+		makeTree(room_paths, room_tree);
+		makeTree(hall_paths, hall_tree);
 
 		FLL<Region<Pint> *> room_ins;
 		FLL<Region<Pint> *> room_outs;
@@ -715,7 +739,7 @@ void mergeSmalls(Type_Tracker &target) {
 				if (area_score > best_area_score) {
 					best_area_score = area_score;
 					best_neighbor = neighbor;
-					best_tree = makeTree(result);
+					makeTree(result, best_tree);
 				}
 			}
 		}
