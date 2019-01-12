@@ -69,7 +69,7 @@ public class Room_Builder : ModuleRules
 			);
 
         LoadClipper(Target);
-        LoadDCEL(Target);
+        //LoadDCEL(Target);
     }
 
     public bool LoadClipper(ReadOnlyTargetRules Target)

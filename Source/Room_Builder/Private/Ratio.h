@@ -52,5 +52,4 @@ public:
 	bool operator<=(const rto &test) const;
 
 	float toFloat() const;
-	double toDouble() const;
 };

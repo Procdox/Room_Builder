@@ -294,6 +294,7 @@ public:
 
 		//general case
 
+		focus = head;
 		after = head->next;
 
 		while (after != nullptr) {
@@ -301,32 +302,38 @@ public:
 			if (after->value == search) {
 				focus->next = after->next;
 
+				if (tail == after) {
+					tail = focus;
+				}
+
 				delete after;
 				length--;
 
-				return true;
+				after = focus->next;
 			}
-
-			focus = after;
-			after = after->next;
+			else {
+				focus = after;
+				after = after->next;
+			}
 		}
+
 		return false;
 	};
 
 	int removeAll(_T search) {
-		FLL_node * focus = head;
+		FLL_node * focus;
 		FLL_node * after;
 		int count = 0;
 
 		//special cases
 
 		while (head != nullptr && head->value == search) {
-			head = head->next;
+			focus = head->next;
 
-			delete focus;
+			delete head;
 			count++;
 
-			focus = head;
+			head = focus;
 		}
 
 		if (head == nullptr) {
@@ -336,12 +343,17 @@ public:
 
 		//general case
 
+		focus = head;
 		after = head->next;
 
 		while (after != nullptr) {
 
 			if (after->value == search) {
 				focus->next = after->next;
+
+				if (tail == after) {
+					tail = focus;
+				}
 
 				delete after;
 				count++;
@@ -353,8 +365,6 @@ public:
 				after = after->next;
 			}
 		}
-
-		if (head == nullptr) tail = nullptr;
 
 		length -= count;
 

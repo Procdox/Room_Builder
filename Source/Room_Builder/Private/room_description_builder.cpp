@@ -4,8 +4,8 @@
 #include "Algo/Reverse.h"
 #include "DrawDebugHelpers.h"
 
-#define room_min_width 30
-#define hall_min_width 20
+#define room_min_width 300
+#define hall_min_width 200
 
 //==========================================================================================================
 //========================================== transforms ====================================================
@@ -18,7 +18,8 @@ FVector2D convert(Pint const &target) {
 ClipperLib::Path toPath(FLL<Pint> const &target) {
 	ClipperLib::Path product;
 	for (auto point : target) {
-		product.push_back(ClipperLib::IntPoint(point.X.toFloat() * 1000, point.Y.toFloat() * 1000));
+		auto temp = point * 10;
+		product.insert(product.begin(), ClipperLib::IntPoint(temp.X.toFloat(), temp.Y.toFloat()));
 	}
 	return product;
 }
@@ -36,20 +37,39 @@ ClipperLib::Paths toPaths(Region<Pint> * target) {
 FLL<Pint> fromPath(ClipperLib::Path const &target, FLL<Pint> const &suggestions) {
 	FLL<Pint> product;
 	for (auto point : target) {
+
 		Pint raw(point.X, point.Y);
-		raw /= 1000;
+		raw /= 10;
 
 		rto best_distance = 1;
+		best_distance /= 10;
+
 		Pint choice = raw;
+
 		for (auto compare : suggestions) {
-			rto size = (raw - compare).SizeSquared();
-			if (size < best_distance) {
+
+			Pint offset = (raw - compare);
+			if (offset.Y < 0)
+				offset.Y *= -1;
+			if (offset.X < 0)
+				offset.X *= -1;
+
+			rto distance = offset.Y;
+
+			if (offset.X > offset.Y) {
+				distance = offset.X;
+			}
+
+			if (distance < best_distance) {
 				choice = compare;
-				best_distance = size;
+
+				best_distance = distance;
+
+				if (distance == 0) break;
 			}
 		}
 
-		product.append(Pint(point.X, point.Y) / 1000);
+		product.push(choice);
 	}
 	return product;
 }
@@ -155,19 +175,20 @@ namespace polytree_utils
 		FLL<Region<Pint> *> relative_ins;
 
 		for (auto target : targets) {
-			subAllocate(target, contour, relative_ins, relative_outs);
+			subAllocate(target, contour, relative_outs, relative_ins);
 		}
 
 		for (auto outer : ref->Childs) {
 			FLL<Region<Pint> *> novel_ins;
 
-			AllocateNode(outer, relative_ins, outs, novel_ins, suggestions);
+			AllocateNode(outer, relative_ins, novel_ins, outs, suggestions);
 
 			relative_ins.clear();
 			relative_ins.absorb(novel_ins);
 		}
 
 		ins.absorb(relative_ins);
+		outs.absorb(relative_outs);
 	}
 
 	void AllocateTree(PolyTree & ref, FLL<Region<Pint> *> targets, FLL<Region<Pint> *> &ins, FLL<Region<Pint> *> &outs) {
@@ -647,7 +668,7 @@ bool Cull_Suggested(Region<Pint> * target, FLL<Region<Pint> *> &results, FLL<Reg
 void mergeGroup(FLL<Region<Pint> *> & nulls) {
 	UE_LOG(LogTemp, Warning, TEXT("Merging Group\n"));
 	for (auto focus = nulls.begin(); focus != nulls.end(); ++focus) {
-		for (auto compare = focus.next(); focus != nulls.end();) {
+		for (auto compare = focus.next(); compare != nulls.end();) {
 			auto v = *compare;
 
 			++compare;
@@ -1009,10 +1030,15 @@ FLL<Pint> Pick_Generator(rto x, rto y, Pint center) {
 	if (gen_choice > .4) {
 		if (gen_choice > .7) {
 			generator = Bevel_Generator;
+			UE_LOG(LogTemp, Warning, TEXT("style: bevel\n"));
 		}
 		else {
 			generator = Diamond_Generator;
+			UE_LOG(LogTemp, Warning, TEXT("style: diamond\n"));
 		}
+	}
+	else {
+		UE_LOG(LogTemp, Warning, TEXT("style: square\n"));
 	}
 
 	return generator(x, y, center);
@@ -1024,8 +1050,8 @@ FLL<Pint> Pick_Generator(rto x, rto y, Pint center) {
 
 //}
 
-bool createRoomAtPoint(Type_Tracker &system_types, const Pint &point, int scale = 1, FLL<Region<Pint> *> * created = nullptr) {
-	UE_LOG(LogTemp, Warning, TEXT("Create Room At Point\n"));
+bool createRoomAtPoint(Type_Tracker &system_types, Pint const &point, int scale = 1, FLL<Region<Pint> *> * created = nullptr) {
+	UE_LOG(LogTemp, Warning, TEXT("Create Room At Point %f,%f"),point.X.toFloat(), point.Y.toFloat());
 	FLL<Region<Pint> *> created_rooms;
 	FLL<Region<Pint> *> created_nulls;
 	FLL<Region<Pint> *> raw_faces;
@@ -1041,6 +1067,7 @@ bool createRoomAtPoint(Type_Tracker &system_types, const Pint &point, int scale 
 	}
 
 	if (choice == nullptr) {
+		UE_LOG(LogTemp, Warning, TEXT("Selected point is not in a null region\n"));
 		return false;
 	}
 
@@ -1050,10 +1077,14 @@ bool createRoomAtPoint(Type_Tracker &system_types, const Pint &point, int scale 
 	int width = FMath::RandRange(2, area / 2);
 	int length = area / width;
 
+	UE_LOG(LogTemp, Warning, TEXT("size: %d %d"), width, length);
+
 	auto bounds = Pick_Generator(width * scale, length * scale, point);
 
+	
+
 	//cull to null Region<Pint>
-	subAllocate(choice, bounds, created_nulls, raw_faces);
+	subAllocate(choice, bounds, created_nulls, created_rooms);
 
 	//remerge rejected regions with nulls
 	for (auto face : raw_faces) {
@@ -1063,14 +1094,64 @@ bool createRoomAtPoint(Type_Tracker &system_types, const Pint &point, int scale 
 	system_types.Nulls.absorb(created_nulls);
 
 	cleanNulls(system_types);
-	
+
 	if (created != nullptr) {
 		created->append(created_rooms);
 	}
 
+	bool success = !created_rooms.empty();
+
 	system_types.Rooms.absorb(created_rooms);
 
-	return !created_rooms.empty();
+	return success;
+}
+
+bool fakeCreate(Type_Tracker &system_types, Pint const &point, generatorFunc style, int width, int length, FLL<Region<Pint> *> * created = nullptr) {
+	UE_LOG(LogTemp, Warning, TEXT("Create Room At Point %f,%f"), point.X.toFloat(), point.Y.toFloat());
+	FLL<Region<Pint> *> created_rooms;
+	FLL<Region<Pint> *> created_nulls;
+	FLL<Region<Pint> *> raw_faces;
+
+	Region<Pint> * choice = nullptr;
+
+	//find containing null
+	for (auto null : system_types.Nulls) {
+		if (contains(null, point).type != FaceRelationType::point_exterior) {
+			choice = null;
+			break;
+		}
+	}
+
+	if (choice == nullptr) {
+		UE_LOG(LogTemp, Warning, TEXT("Selected point is not in a null region\n"));
+		return false;
+	}
+
+	system_types.Nulls.remove(choice);
+
+	auto bounds = style(width * 7, length * 7, point);
+
+	//cull to null Region<Pint>
+	subAllocate(choice, bounds, created_nulls, created_rooms);
+
+	//remerge rejected regions with nulls
+	for (auto face : raw_faces) {
+		Cull_Suggested(face, created_rooms, created_nulls);
+	}
+
+	system_types.Nulls.absorb(created_nulls);
+
+	cleanNulls(system_types);
+
+	if (created != nullptr) {
+		created->append(created_rooms);
+	}
+
+	bool success = !created_rooms.empty();
+
+	system_types.Rooms.absorb(created_rooms);
+
+	return success;
 }
 
 //attempts to create rooms distributed evenly across the space
@@ -1213,17 +1294,52 @@ void create_Layout(Type_Tracker &system_types, int large, int medium, int small,
 	TArray<building_region*> mediums;
 	TArray<building_region*> smalls;
 
+	//FLL<Region<Pint> *> temp_created;
+
+	//createRoomAtPoint(system_types, Pint(0,0), 7, &temp_created);
+
+	//for (auto room : temp_created) {
+	//	larges.Push(new building_region(0, room));
+	//}
+
 	for (int ii = 0; ii < large; ii++) {
 		//pick point
-		auto point = boxUniformPoint(80,80) -Pint(40, 40);
+		auto point = boxUniformPoint(140,140) - Pint(70, 70);
 		//point.toGrid(P_micro_grid);
 		FLL<Region<Pint> *> temp_created;
-		if (createRoomAtPoint(system_types, point, 7, &temp_created)) { //FMath::RandRange(6, 10)
-			for (auto room : temp_created) {
-				larges.Push(new building_region(0, room));
-			}
+
+		if (createRoomAtPoint(system_types, point, 7, &temp_created))
+			UE_LOG(LogTemp, Warning, TEXT("Created %d sub-rooms \n"), temp_created.size());
+
+		for (auto room : temp_created) {
+			larges.Push(new building_region(0, room));
 		}
 	}
+
+	/*{
+		FLL<Region<Pint> *> temp_created;
+		fakeCreate(system_types, Pint(rto(28), rto(-68) / 5), Bevel_Generator, 3, 2, &temp_created);
+		for (auto room : temp_created) {
+			larges.Push(new building_region(0, room));
+		}
+	}
+	{
+		FLL<Region<Pint> *> temp_created;
+		fakeCreate(system_types, Pint(rto(28), rto(152) / 5), Bevel_Generator, 3, 3, &temp_created);
+		for (auto room : temp_created) {
+			larges.Push(new building_region(0, room));
+		}
+	}
+	{
+		FLL<Region<Pint> *> temp_created;
+		fakeCreate(system_types, Pint(rto(28)/5, rto(-151) / 5), Square_Generator, 5, 2, &temp_created);
+		for (auto room : temp_created) {
+			larges.Push(new building_region(0, room));
+		}
+	}*/
+
+
+	UE_LOG(LogTemp, Warning, TEXT("Larges created: %d\n"), larges.Num());
 
 	/*FLL<Face<Pint> *> temp_created;
 	createRoomAtPoint(system_types, _P(10 * grid_coef, -10 * grid_coef), 1, &temp_created);
@@ -1233,7 +1349,7 @@ void create_Layout(Type_Tracker &system_types, int large, int medium, int small,
 	}*/
 
 
-	for (auto large : larges) {
+	/*for (auto large : larges) {
 		//creates some MEDIUMS
 		FLL<Region<Pint> *> temp_created;
 		createNearRooms(system_types, large->region, medium, 5, &temp_created, ref);
@@ -1248,7 +1364,7 @@ void create_Layout(Type_Tracker &system_types, int large, int medium, int small,
 		for (auto room : temp_created) {
 			smalls.Push(new building_region(2, room, medium));
 		}
-	}
+	}*/
 
 	for (auto large : larges) {
 		delete large;
@@ -1270,6 +1386,9 @@ void Aroom_description_builder::Main_Generation_Loop() {
 	//float system_x = FMath::RandRange(5, 9) * 4;
 	//float system_y = FMath::RandRange(2, 4) * 4;
 
+	//FMath::SRandInit(0);
+	FMath::RandInit(0);
+
 	auto system_bounds = Square_Generator(100, 100, Pint(0,0));
 
 	Draw_Border(toFVector(system_bounds), 0, GetWorld());
@@ -1277,7 +1396,7 @@ void Aroom_description_builder::Main_Generation_Loop() {
 	system_types.Nulls.append(system_new.region(system_bounds));
 	//system_types.Nulls.Push(system_new.createUniverse()); system_new.draw(system_bounds)
 
-	create_Layout(system_types, 3, 3, 2, GetWorld());
+	create_Layout(system_types, 10, 3, 2, GetWorld());
 
 	//generate MAIN Region<Pint>
 	//createRoomAtPoint(system_types, _P(0, 0), 4);
