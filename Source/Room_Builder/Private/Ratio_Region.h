@@ -19,9 +19,11 @@ enum FaceRelationType { point_exterior, point_on_boundary, point_interior };
 struct interact {
 	Pint location;
 	FaceRelationType type;
+	
+	FaceRelationType mid_type;
+	Pint mid_location;
+
 	Edge<Pint> * mark;
-	bool mid_interior;
-	Pint mid;
 
 	interact() {
 		mark = nullptr;

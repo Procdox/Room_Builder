@@ -18,7 +18,7 @@ FVector2D convert(Pint const &target) {
 ClipperLib::Path toPath(FLL<Pint> const &target) {
 	ClipperLib::Path product;
 	for (auto point : target) {
-		auto temp = point * 10;
+		auto temp = point * 100;
 		product.insert(product.begin(), ClipperLib::IntPoint(temp.X.toFloat(), temp.Y.toFloat()));
 	}
 	return product;
@@ -36,19 +36,27 @@ ClipperLib::Paths toPaths(Region<Pint> * target) {
 
 FLL<Pint> fromPath(ClipperLib::Path const &target, FLL<Pint> const &suggestions) {
 	FLL<Pint> product;
+
+	FLL<FLL<Pint>::FLL_iterator_c> leads;
+
 	for (auto point : target) {
 
 		Pint raw(point.X, point.Y);
-		raw /= 10;
+		raw /= 100;
 
 		rto best_distance = 1;
 		best_distance /= 10;
 
-		Pint choice = raw;
+		//Pint choice = raw;
 
-		for (auto compare : suggestions) {
+		FLL<Pint>::FLL_iterator_c choice = suggestions.end();
 
-			Pint offset = (raw - compare);
+		for (auto compare = suggestions.begin(); compare != suggestions.end(); ++compare) {
+
+			Pint target = *(compare.cyclic_next());
+
+			Pint offset = (raw - target);
+
 			if (offset.Y < 0)
 				offset.Y *= -1;
 			if (offset.X < 0)
@@ -69,9 +77,78 @@ FLL<Pint> fromPath(ClipperLib::Path const &target, FLL<Pint> const &suggestions)
 			}
 		}
 
-		product.push(choice);
+		leads.append(choice);
+		//if(choice != suggestions.end())
+		//	product.append(*(choice.cyclic_next()));
+		//else
+		product.append(raw);
 	}
-	return product;
+
+	FLL<Pint> result;
+
+	auto focus = product.begin().cyclic_next();
+	auto kill = suggestions.end();
+
+	for (auto lead = leads.begin(); lead != leads.end(); ++lead) {
+
+		auto next = lead.cyclic_next();
+		auto after = lead.cyclic_next().cyclic_next();
+
+		if (*next != kill) {
+
+			Pint project = *((*next).cyclic_next());
+			//*(compare.cyclic_next());
+			//*(choice.cyclic_next())
+			UE_LOG(LogTemp, Warning, TEXT("point is stable: (%f,%f) => (%f, %f)"),(*focus).X.toFloat(), (*focus).Y.toFloat(), project.X.toFloat(), project.Y.toFloat());
+			result.push(project);
+			//result.push(*focus);
+		}
+		else {
+			if (*lead != kill) {
+				if (*after != kill) {
+					
+					Pint project;
+
+					Pint A_S = *((*lead).cyclic_next());
+					Pint A_E = *((*lead));
+					Pint B_S = *((*after).cyclic_next());
+					Pint B_E = *((*after).cyclic_next().cyclic_next());
+
+					Pint::getIntersect(A_S, A_E, B_S, B_E, project);
+
+					UE_LOG(LogTemp, Warning, TEXT("projecting to solve for next with both: (%f,%f) => (%f,%f)"), (*focus).X.toFloat(), (*focus).Y.toFloat(), project.X.toFloat(), project.Y.toFloat());
+
+					result.push(project);
+				}
+				else {
+					UE_LOG(LogTemp, Warning, TEXT("HMM solve for next with just this: (%f,%f)"), (*focus).X.toFloat(), (*focus).Y.toFloat());
+					result.push(*focus);
+				}
+			}
+			else {
+				if (*(lead.cyclic_next().cyclic_next()) != kill) {
+					UE_LOG(LogTemp, Warning, TEXT("HMM solve for next with just after: (%f,%f)"), (*focus).X.toFloat(), (*focus).Y.toFloat());
+					result.push(*focus);
+				}
+				else {
+					UE_LOG(LogTemp, Warning, TEXT("FUCK solve for next with NOTHING: (%f,%f)"), (*focus).X.toFloat(), (*focus).Y.toFloat());
+					result.push(*focus);
+				}
+			}
+		}
+
+		focus = focus.cyclic_next();
+	}
+
+	//UE_LOG(LogTemp, Warning, TEXT("unlocked"));
+	//for(auto point : product)
+	//	UE_LOG(LogTemp, Warning, TEXT("(%f, %f)"), point.X.toFloat(), point.Y.toFloat());
+	//
+	//UE_LOG(LogTemp, Warning, TEXT("locked"));
+	//for (auto point : result)
+	//	UE_LOG(LogTemp, Warning, TEXT("(%f, %f)"), point.X.toFloat(), point.Y.toFloat());
+
+	return result;
 }
 
 TArray<FVector2D> toFVector(FLL<Pint> const &target) {
@@ -175,6 +252,7 @@ namespace polytree_utils
 		FLL<Region<Pint> *> relative_ins;
 
 		for (auto target : targets) {
+			UE_LOG(LogTemp, Warning, TEXT("SA - allocate node\n"));
 			subAllocate(target, contour, relative_outs, relative_ins);
 		}
 
@@ -1084,6 +1162,7 @@ bool createRoomAtPoint(Type_Tracker &system_types, Pint const &point, int scale 
 	
 
 	//cull to null Region<Pint>
+	UE_LOG(LogTemp, Warning, TEXT("CR - allocate node\n"));
 	subAllocate(choice, bounds, created_nulls, created_rooms);
 
 	//remerge rejected regions with nulls

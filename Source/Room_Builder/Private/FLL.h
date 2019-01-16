@@ -36,6 +36,14 @@ public:
 		FLL_node * focus;
 
 	public:
+		FLL_iterator() {
+			relevant = nullptr;
+			focus = nullptr;
+		}
+		FLL_iterator(FLL_iterator const & target) {
+			relevant = target.relevant;
+			focus = target.focus;
+		}
 		FLL_iterator(FLL * r, FLL_node * v) {
 			relevant = r;
 			focus = v;
@@ -43,7 +51,6 @@ public:
 		FLL_iterator & operator=(FLL_iterator const & target) {
 			relevant = target.relevant;
 			focus = target.focus;
-
 			return *this;
 		}
 
@@ -51,6 +58,9 @@ public:
 			focus = focus->next;
 
 			return *this;
+		}
+		bool operator==(FLL_iterator const & target) const {
+			return focus == target.focus;
 		}
 		bool operator!=(FLL_iterator const & target) const {
 			return focus != target.focus;
@@ -81,6 +91,14 @@ public:
 		FLL_node const * focus;
 
 	public:
+		FLL_iterator_c() {
+			relevant = nullptr;
+			focus = nullptr;
+		}
+		FLL_iterator_c(FLL_iterator_c const &target) {
+			relevant = target.relevant;
+			focus = target.focus;
+		}
 		FLL_iterator_c(FLL const * r, FLL_node const * v) {
 			relevant = r;
 			focus = v;
@@ -95,6 +113,9 @@ public:
 			focus = focus->next;
 
 			return *this;
+		}
+		bool operator==(FLL_iterator_c const & target) const {
+			return focus == target.focus;
 		}
 		bool operator!=(FLL_iterator_c const & target) const {
 			return focus != target.focus;
@@ -294,7 +315,6 @@ public:
 
 		//general case
 
-		focus = head;
 		after = head->next;
 
 		while (after != nullptr) {
@@ -302,38 +322,32 @@ public:
 			if (after->value == search) {
 				focus->next = after->next;
 
-				if (tail == after) {
-					tail = focus;
-				}
-
 				delete after;
 				length--;
 
-				after = focus->next;
+				return true;
 			}
-			else {
-				focus = after;
-				after = after->next;
-			}
-		}
 
+			focus = after;
+			after = after->next;
+		}
 		return false;
 	};
 
 	int removeAll(_T search) {
-		FLL_node * focus;
+		FLL_node * focus = head;
 		FLL_node * after;
 		int count = 0;
 
 		//special cases
 
 		while (head != nullptr && head->value == search) {
-			focus = head->next;
+			head = head->next;
 
-			delete head;
+			delete focus;
 			count++;
 
-			head = focus;
+			focus = head;
 		}
 
 		if (head == nullptr) {
@@ -343,17 +357,12 @@ public:
 
 		//general case
 
-		focus = head;
 		after = head->next;
 
 		while (after != nullptr) {
 
 			if (after->value == search) {
 				focus->next = after->next;
-
-				if (tail == after) {
-					tail = focus;
-				}
 
 				delete after;
 				count++;
@@ -365,6 +374,8 @@ public:
 				after = after->next;
 			}
 		}
+
+		if (head == nullptr) tail = nullptr;
 
 		length -= count;
 

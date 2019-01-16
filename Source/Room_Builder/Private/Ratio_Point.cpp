@@ -175,12 +175,9 @@ bool Pint::getIntersect(const Pint &A_S, const Pint &A_E, const Pint &B_S, const
 	const auto s = (A.X * D.Y - A.Y * D.X) / denom;
 	const auto t = (B.X * D.Y - B.Y * D.X) / denom;
 
-	if (s >= 0 && s <= 1 && t >= 0  && t <= 1) {
-		Result = (A * t) + A_S;
-		return true;
-	}
+	Result = (A * t) + A_S;
 
-	return false;
+	return (s >= 0 && s <= 1 && t >= 0 && t <= 1);
 }
 
 rto Pint::area(FLL<Pint> const & boundary) {
