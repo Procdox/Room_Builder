@@ -908,6 +908,8 @@ public:
 		return result;
 	}
 	//creates an edge and its inverse connecting after an two edges
+	//if this links two faces, b's is removed
+	//if this splits a face, the novel has b as it's root
 	Edge<_P> * addEdge(Edge<_P> * a, Edge<_P> * b) {
 		Edge<_P> * result = createEdge();
 		Face<_P> * novel = nullptr;

@@ -1,7 +1,7 @@
 #pragma once
 #include "Ratio.h"
 #include "FLL.h"
-
+typedef signed long long int64;
 /*
 
 Contains defintion for an integer bound 2d vector.
@@ -26,19 +26,19 @@ struct Pint {
 
 	Pint operator+(const Pint &target) const;
 	Pint operator-(const Pint &target) const;
-	Pint operator*(int factor) const;
+	Pint operator*(int64 factor) const;
 	Pint operator*(rto factor) const;
 	Pint operator*(const Pint &target) const;
-	Pint operator/(int factor) const;
+	Pint operator/(int64 factor) const;
 	Pint operator/(rto factor) const;
 	Pint operator/(const Pint &target) const;
 
 	Pint& operator+=(const Pint &target);
 	Pint& operator-=(const Pint &target);
-	Pint& operator*=(int factor);
+	Pint& operator*=(int64 factor);
 	Pint& operator*=(rto factor);
 	Pint& operator*=(const Pint &target);
-	Pint& operator/=(int factor);
+	Pint& operator/=(int64 factor);
 	Pint& operator/=(rto factor);
 	Pint& operator/=(const Pint &target);
 

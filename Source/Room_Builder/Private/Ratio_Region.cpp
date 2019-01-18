@@ -8,7 +8,7 @@
 
 FaceRelation const getPointRelation(Face<Pint> & rel, Pint const &test_point) {
 	Edge<Pint> * focus = rel.getRoot();
-	int count = 0;
+	int64 count = 0;
 
 	bool is_best = false;
 	rto best_distance = 0;
@@ -64,7 +64,7 @@ FaceRelation const getPointRelation(Face<Pint> & rel, Pint const &test_point) {
 }
 
 FaceRelationType const getPointRelation(FLL<Pint> const & rel, Pint const &test_point) {
-	int count = 0;
+	int64 count = 0;
 
 	bool is_best = false;
 	rto best_distance = 0;
@@ -665,4 +665,47 @@ void cleanRegion(Region<Pint> * target) {
 			focus = focus->getNext();
 		}
 	}
+}
+
+Region<Pint> * RegionAdd(Region<Pint> * target, Edge<Pint> * A, Edge<Pint> * B) {
+	auto A_face = A->getFace();
+	auto B_face = B->getFace();
+
+
+	Region<Pint> * result = nullptr;
+
+	if (A_face->getGroup() != target || B_face->getGroup() != target)
+		return nullptr;
+
+	if (B_face == A_face) {
+		//we will be splitting the region
+
+		target->getUni()->addEdge(A, B);
+
+		B_face = B->getFace();
+
+		result = target->getUni()->region();
+
+		result->append(B_face);
+
+		FLL<Face<Pint> *> transfers;
+
+		for (auto edge : target->getBounds())
+			if (edge == A_face)
+				continue;
+			else if (getPointRelation(*edge, B_face->getRoot()->getStart()->getPosition()).type == FaceRelationType::point_interior
+				&& getPointRelation(*B_face, edge->getRoot()->getStart()->getPosition()).type == FaceRelationType::point_interior)
+				transfers.append(edge);
+
+		for (auto edge : transfers)
+			result->append(edge);
+	}
+	else {
+		//we will be connecting two boundaries
+		target->remove(B_face);
+
+		target->getUni()->addEdge(A, B);
+	}
+
+	return result;
 }

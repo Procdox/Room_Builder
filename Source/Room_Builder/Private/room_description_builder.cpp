@@ -172,8 +172,8 @@ TArray<FVector2D> toFVector(FLL<Pint> const &target) {
 
 void Draw_Border(const TArray<FVector2D> &border, float height, const UWorld *ref, FColor color = color_Pnk) {
 	float offset = 0;
-	for (int index = 0; index < border.Num(); index++) {
-		int next = (index + 1) % border.Num();
+	for (int64 index = 0; index < border.Num(); index++) {
+		int64 next = (index + 1) % border.Num();
 
 		DrawDebugLine(
 			ref,
@@ -191,7 +191,7 @@ void Draw_Border(const TArray<FVector2D> &border, float height, const UWorld *re
 }
 
 
-Pint circularUniformPoint(rto radius = 1, int divisions = 100) {
+Pint circularUniformPoint(rto radius = 1, int64 divisions = 100) {
 	float t = 2 * PI*FMath::RandRange(0.f, 1.f);
 	float u = FMath::RandRange(0.f, 1.f) + FMath::RandRange(0.f, 1.f);
 	float r = u;
@@ -201,12 +201,12 @@ Pint circularUniformPoint(rto radius = 1, int divisions = 100) {
 	return Pint(r*cos(t),r*sin(t)) * radius / divisions;
 
 }
-Pint boxUniformPoint(rto width = 10, rto height = 10, int divisions = 100) {
-	return Pint(width * (int)FMath::RandRange(0, divisions), height * (int)FMath::RandRange(0, divisions)) / divisions;
+Pint boxUniformPoint(rto width = 10, rto height = 10, int64 divisions = 100) {
+	return Pint(width * (int64)FMath::RandRange(0, divisions), height * (int64)FMath::RandRange(0, divisions)) / divisions;
 }
-Pint boxUniformPoint(PBox const & box, int divisions = 100) {
-	int X = (int)FMath::RandRange(-divisions, divisions);
-	int Y = (int)FMath::RandRange(-divisions, divisions);
+Pint boxUniformPoint(PBox const & box, int64 divisions = 100) {
+	int64 X = (int64)FMath::RandRange(-(float)divisions, (float)divisions);
+	int64 Y = (int64)FMath::RandRange(-(float)divisions, (float)divisions);
 
 	return Pint(X, Y) * box.getExtent() + box.getCenter();
 }
@@ -237,7 +237,140 @@ PBox getBounds(Region<Pint> * target) {
 }
 
 //==========================================================================================================
-//=================================== polytree utilities ================================================
+//=================================== chord split utilities ================================================
+//==========================================================================================================
+
+namespace chord_splits
+{
+
+	struct split_canidate 
+	{
+		Edge<Pint> * A_edge;
+		Edge<Pint> * B_edge;
+		Pint A;
+		Pint B;
+		rto distance;
+	};
+
+	void chord_clean(Region<Pint> * target, rto const & thresh, FLL<Region<Pint> *> & ins, FLL<Region<Pint> *> & outs) {
+		//if no pair is small enough to split, add to ins and return
+		split_canidate result;
+		bool found_option = false;
+
+		FLL<Edge<Pint> *> relevants;
+
+		for (auto border : target->getBounds()) {
+			auto r = border->getLoopEdges();
+			relevants.absorb(r);
+		}
+
+		for (auto edge : relevants) {
+			Pint A_start = edge->getEnd()->getPosition();
+
+			for (auto compare : relevants) {
+				if (compare == edge || compare == edge->getNext() || compare == edge->getLast()) {
+					continue;
+				}
+
+				//get smallest points
+				Pint B_start = compare->getStart()->getPosition();
+				Pint B_end = compare->getEnd()->getPosition();
+
+				Pint B_segment = B_end - B_start;
+				Pint B_perp(-B_segment.Y, B_segment.X);
+
+				Pint intersect;
+				Pint::getIntersect(B_start, B_end, A_start, A_start + B_perp, intersect);
+
+				auto state = intersect.getState(B_start, B_end);
+
+				if (state == point_near_segment_state::before_segment)
+					intersect = B_start;
+				else if (state == point_near_segment_state::after_segment)
+					intersect = B_end;
+
+				if (intersect == edge->getNext()->getEnd()->getPosition() ||
+					intersect == edge->getStart()->getPosition() ||
+					intersect == compare->getStart()->getPosition())
+					continue;
+
+				rto distance = (intersect - A_start).SizeSquared();
+
+				if(distance < thresh)
+					if(contains(target, (intersect + A_start)/2 ).type == FaceRelationType::point_interior)
+						if (!found_option || distance < result.distance) {
+							found_option = true;
+							result.distance = distance;
+							result.A_edge = edge;
+							result.B_edge = compare;
+							result.A = A_start;
+							result.B = intersect;
+						}
+			}
+		}
+
+		if (found_option) {
+			if (result.B != result.B_edge->getEnd()->getPosition()) {
+				//in-line, subdivide
+				result.B_edge->subdivide(result.B);
+			}
+			//split now occurs at end of A_edge and B_edge
+
+			//split
+			UE_LOG(LogTemp, Warning, TEXT("Orig"));
+			for (auto face : target->getBounds()) {
+				UE_LOG(LogTemp, Warning, TEXT("Face"));
+				for (auto point : face->getLoopPoints()) {
+					UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.toFloat(), point.Y.toFloat());
+				}
+			}
+
+			auto P = RegionAdd(target, result.A_edge, result.B_edge);
+
+			UE_LOG(LogTemp, Warning, TEXT("Result target"));
+			for (auto face : target->getBounds()) {
+				UE_LOG(LogTemp, Warning, TEXT("Face"));
+				for (auto point : face->getLoopPoints()) {
+					UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.toFloat(), point.Y.toFloat());
+				}
+			}
+			if (P != nullptr) {
+				UE_LOG(LogTemp, Warning, TEXT("Result P"));
+				for (auto face : P->getBounds()) {
+					UE_LOG(LogTemp, Warning, TEXT("Face"));
+					for (auto point : face->getLoopPoints()) {
+						UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.toFloat(), point.Y.toFloat());
+					}
+				}
+			}
+			
+
+			if (P == nullptr) {
+				chord_clean(target, thresh, ins, outs);
+			}
+			else {
+
+				//if either is a triangle, DELETE
+				if (result.A_edge->getNext()->getNext()->getNext() == result.A_edge)
+					outs.push(target);
+				else
+					chord_clean(target, thresh, ins, outs);
+
+				if (result.B_edge->getNext()->getNext()->getNext() == result.B_edge)
+					outs.push(P);
+				else
+					chord_clean(P, thresh, ins, outs);
+			}
+		}
+		else
+			ins.push(target);
+	}
+}
+
+
+
+//==========================================================================================================
+//===================================== polytree utilities =================================================
 //==========================================================================================================
 
 namespace polytree_utils
@@ -428,7 +561,7 @@ void makeTree(ClipperLib::Paths &source, ClipperLib::PolyTree & result) {
 	clip.Execute(ClipperLib::ctUnion, result);
 }
 
-ClipperLib::Paths sizeRestrictPaths(ClipperLib::Paths &source, int radius) {
+ClipperLib::Paths sizeRestrictPaths(ClipperLib::Paths &source, int64 radius) {
 	ClipperLib::Paths result;
 
 	ClipperLib::Paths reduced;
@@ -684,7 +817,7 @@ struct Type_Tracker {
 		return false;
 	}
 	void display(const UWorld* world) {
-		int p = 0;
+		int64 p = 0;
 		for (auto small : Smalls) {
 			cleanRegion(small);
 			for(auto border : small->getBounds())
@@ -724,18 +857,7 @@ bool Cull_Suggested(Region<Pint> * target, FLL<Region<Pint> *> &results, FLL<Reg
 	FLL<Region<Pint> *> rooms;
 	FLL<Region<Pint>*> outers;
 
-	ClipperLib::Paths source = toPaths(target);
-	auto restricted = sizeRestrictPaths(source, room_min_width / 2);
-
-	if (restricted.size() < 1) {
-		nulls.append(target);
-		return false;
-	}
-
-	ClipperLib::PolyTree rooms_tree;
-	makeTree(restricted, rooms_tree);
-
-	polytree_utils::AllocateTree(rooms_tree, target, rooms, outers);
+	chord_splits::chord_clean(target, room_min_width, rooms, outers);
 
 	nulls.append(outers);
 	results.append(rooms);
@@ -746,6 +868,8 @@ bool Cull_Suggested(Region<Pint> * target, FLL<Region<Pint> *> &results, FLL<Reg
 void mergeGroup(FLL<Region<Pint> *> & nulls) {
 	UE_LOG(LogTemp, Warning, TEXT("Merging Group\n"));
 	for (auto focus = nulls.begin(); focus != nulls.end(); ++focus) {
+		merge(*focus, *focus);
+
 		for (auto compare = focus.next(); compare != nulls.end();) {
 			auto v = *compare;
 
@@ -767,47 +891,28 @@ void cleanNulls(Type_Tracker &target) {
 	//input_nulls.Append(target.Smalls);
 	mergeGroup(input_nulls);
 
-	FLL<Region<Pint> *> cleaned_nulls;
-	FLL<Region<Pint> *> pruned_halls;
-	FLL<Region<Pint> *> pruned_smalls;
-
 	for (auto focus : input_nulls) {
-		ClipperLib::Paths source = toPaths(focus);
-
-		auto room_paths = sizeRestrictPaths(source, room_min_width / 2);
-
-		auto hall_canidates = subtractPaths(source, room_paths);
-
-		auto hall_paths = sizeRestrictPaths(hall_canidates, hall_min_width / 2);
-
-		ClipperLib::PolyTree room_tree;
-		ClipperLib::PolyTree hall_tree;
-		makeTree(room_paths, room_tree);
-		makeTree(hall_paths, hall_tree);
 
 		FLL<Region<Pint> *> room_ins;
 		FLL<Region<Pint> *> room_outs;
 		FLL<Region<Pint> *> hall_ins;
 		FLL<Region<Pint> *> hall_outs;
 
-		polytree_utils::AllocateTree(room_tree, focus, room_ins, room_outs);
+		chord_splits::chord_clean(focus, room_min_width, room_ins, room_outs);
 
-		polytree_utils::AllocateTree(hall_tree, room_outs, hall_ins, hall_outs);
+		for (auto out : room_outs) {
+			chord_splits::chord_clean(out, hall_min_width, hall_ins, hall_outs);
+		}
 
-		cleaned_nulls.absorb(room_ins);
-		pruned_halls.absorb(hall_ins);
-		pruned_smalls.absorb(hall_outs);
-
+		target.Nulls.absorb(room_ins);
+		target.Halls.absorb(hall_ins);
+		target.Smalls.absorb(hall_outs);
 	}
-
-	target.Nulls.absorb(cleaned_nulls);
-	target.Halls.absorb(pruned_halls);
-	target.Smalls.absorb(pruned_smalls);
 
 	mergeGroup(target.Smalls);
 }
 
-void mergeSmalls(Type_Tracker &target) {
+/*void mergeSmalls(Type_Tracker &target) {
 	UE_LOG(LogTemp, Warning, TEXT("Merge Smalls\n"));
 	//for each small
 	//for connected room
@@ -827,20 +932,20 @@ void mergeSmalls(Type_Tracker &target) {
 				continue;
 			}
 
+			//chord_splits::chord_clean(neighbor, room_min_width, hall_ins, hall_outs);
+			//auto other_boundary = toPaths(neighbor);
 
-			auto other_boundary = toPaths(neighbor);
+			//auto grouping = addPaths(other_boundary, local_boundary);
+			//auto result = sizeRestrictPaths(grouping, room_min_width / 2);
 
-			auto grouping = addPaths(other_boundary, local_boundary);
-			auto result = sizeRestrictPaths(grouping, room_min_width / 2);
-
-			if (result.size() > 0) {
-				float area_score = ClipperLib::Area(result[0]);
-				if (area_score > best_area_score) {
-					best_area_score = area_score;
-					best_neighbor = neighbor;
-					makeTree(result, best_tree);
-				}
-			}
+			//if (result.size() > 0) {
+			//	float area_score = ClipperLib::Area(result[0]);
+			//	if (area_score > best_area_score) {
+			//		best_area_score = area_score;
+			//		best_neighbor = neighbor;
+			//		makeTree(result, best_tree);
+			//	}
+			//}
 		}
 
 		if (best_neighbor != nullptr) {
@@ -848,7 +953,7 @@ void mergeSmalls(Type_Tracker &target) {
 			FLL<Region<Pint> *> outs;
 
 			
-			polytree_utils::AllocateTree(best_tree, small, ins, outs);
+			//polytree_utils::AllocateTree(best_tree, small, ins, outs);
 
 			for (auto in : ins) {
 				merge(best_neighbor, in);
@@ -858,9 +963,11 @@ void mergeSmalls(Type_Tracker &target) {
 			target.Smalls.append(outs);
 		}
 	}
-}
+}*/
+
+
 /*
-FLL<Pint> choosePointsNear(Region<Pint> const & target, int count, rto offset){
+FLL<Pint> choosePointsNear(Region<Pint> const & target, int64 count, rto offset){
 	//pick n points AWAY from the polygon
 	//get center offsets of each face
 	
@@ -880,7 +987,7 @@ FLL<Pint> choosePointsNear(Region<Pint> const & target, int count, rto offset){
 	auto segments = target.getLoopPoints();
 
 	FLL<Pint> seeds;
-	for (int ii = 0; ii < count; ii++) {
+	for (int64 ii = 0; ii < count; ii++) {
 		Pint seed = circularUniformPoint(size);
 		seed.X += center.X;
 		seed.Y += center.Y;
@@ -914,12 +1021,12 @@ FLL<Pint> choosePointsNear(Region<Pint> const & target, int count, rto offset){
 
 struct HallwayPrototype {
 	HallwayPrototype* parent;
-	int parent_generation;
+	int64 parent_generation;
 
 	TArray<HallwayPrototype*> children;
 
 	TArray<_P> path;
-	HallwayPrototype(HallwayPrototype* p, int g) {
+	HallwayPrototype(HallwayPrototype* p, int64 g) {
 		parent = p;
 		parent_generation = g;
 	}
@@ -942,7 +1049,7 @@ struct HallwayPrototype {
 		
 		
 		//find parent 
-		int p_id = grand->children.Find(parent);
+		int64 p_id = grand->children.Find(parent);
 		grand->children[p_id] = this;
 
 		//these change OUR references, so they should be last
@@ -950,7 +1057,7 @@ struct HallwayPrototype {
 		for (auto child : parent->children) {
 			child->parent = this;
 		}
-		int parent_lifetime = parent->children.Num();
+		int64 parent_lifetime = parent->children.Num();
 		for (auto child : children) {
 			child->parent_generation += parent_lifetime;
 		}
@@ -1004,7 +1111,7 @@ void prototyper() {
 	TArray<F_DCEL::Edge*> canidates;
 	start->getRootEdge()->listFaceLoop(canidates);
 
-	for (int ii = 0; ii < canidates.Num(); ii++) {
+	for (int64 ii = 0; ii < canidates.Num(); ii++) {
 		auto start = canidates[ii]->getStartPoint()->getPosition();
 		auto end = canidates[ii]->getEndPoint()->getPosition();
 		if ((end - start).Size() < 150) {
@@ -1012,7 +1119,7 @@ void prototyper() {
 		}
 	}
 
-	for(int ii = 0; ii < 3; ii++){
+	for(int64 ii = 0; ii < 3; ii++){
 		//auto target = canidates/
 	}
 
@@ -1128,7 +1235,7 @@ FLL<Pint> Pick_Generator(rto x, rto y, Pint center) {
 
 //}
 
-bool createRoomAtPoint(Type_Tracker &system_types, Pint const &point, int scale = 1, FLL<Region<Pint> *> * created = nullptr) {
+bool createRoomAtPoint(Type_Tracker &system_types, Pint const &point, int64 scale = 1, FLL<Region<Pint> *> * created = nullptr) {
 	UE_LOG(LogTemp, Warning, TEXT("Create Room At Point %f,%f"),point.X.toFloat(), point.Y.toFloat());
 	FLL<Region<Pint> *> created_rooms;
 	FLL<Region<Pint> *> created_nulls;
@@ -1151,9 +1258,9 @@ bool createRoomAtPoint(Type_Tracker &system_types, Pint const &point, int scale 
 
 	system_types.Nulls.remove(choice);
 
-	int area = FMath::RandRange(6, 14);
-	int width = FMath::RandRange(2, area / 2);
-	int length = area / width;
+	int64 area = FMath::RandRange(6, 14);
+	int64 width = FMath::RandRange(2, area / 2);
+	int64 length = area / width;
 
 	UE_LOG(LogTemp, Warning, TEXT("size: %d %d"), width, length);
 
@@ -1163,7 +1270,7 @@ bool createRoomAtPoint(Type_Tracker &system_types, Pint const &point, int scale 
 
 	//cull to null Region<Pint>
 	UE_LOG(LogTemp, Warning, TEXT("CR - allocate node\n"));
-	subAllocate(choice, bounds, created_nulls, created_rooms);
+	subAllocate(choice, bounds, created_nulls, raw_faces);
 
 	//remerge rejected regions with nulls
 	for (auto face : raw_faces) {
@@ -1185,7 +1292,7 @@ bool createRoomAtPoint(Type_Tracker &system_types, Pint const &point, int scale 
 	return success;
 }
 
-bool fakeCreate(Type_Tracker &system_types, Pint const &point, generatorFunc style, int width, int length, FLL<Region<Pint> *> * created = nullptr) {
+bool fakeCreate(Type_Tracker &system_types, Pint const &point, generatorFunc style, int64 width, int64 length, FLL<Region<Pint> *> * created = nullptr) {
 	UE_LOG(LogTemp, Warning, TEXT("Create Room At Point %f,%f"), point.X.toFloat(), point.Y.toFloat());
 	FLL<Region<Pint> *> created_rooms;
 	FLL<Region<Pint> *> created_nulls;
@@ -1234,13 +1341,13 @@ bool fakeCreate(Type_Tracker &system_types, Pint const &point, generatorFunc sty
 }
 
 //attempts to create rooms distributed evenly across the space
-bool createDistributedRooms(Type_Tracker &system_types, const int attempts_per_cell = 5, int scale = 1, FLL<Region<Pint> *> *created = nullptr) {
+bool createDistributedRooms(Type_Tracker &system_types, const int64 attempts_per_cell = 5, int64 scale = 1, FLL<Region<Pint> *> *created = nullptr) {
 	//GRID METHOD
 	//from a grid, for each grid point we select a point within a tolerance radius
 	//choose a grid
 	//skew, stretch, rotation, offset
-	//offset.X = (FMath::RandRange((int)null_bounds.Min.X / 100, (int)null_bounds.Max.X) / 100) * 100.f;
-	//offset.Y = (FMath::RandRange((int)null_bounds.Min.Y / 100, (int)null_bounds.Max.Y) / 100) * 100.f;
+	//offset.X = (FMath::RandRange((int64)null_bounds.Min.X / 100, (int64)null_bounds.Max.X) / 100) * 100.f;
+	//offset.Y = (FMath::RandRange((int64)null_bounds.Min.Y / 100, (int64)null_bounds.Max.Y) / 100) * 100.f;
 	
 	//offset only for now
 #define grid_width 10
@@ -1250,10 +1357,10 @@ bool createDistributedRooms(Type_Tracker &system_types, const int attempts_per_c
 	Pint offset = boxUniformPoint(grid_width, grid_height);
 	Pint skew = boxUniformPoint(grid_width, grid_height);
 
-	for (int xx = -5; xx <= 5; xx++) {
-		for (int yy = -5; yy <= 5; yy++) {
+	for (int64 xx = -5; xx <= 5; xx++) {
+		for (int64 yy = -5; yy <= 5; yy++) {
 			//test a couple points until we find one in the space
-			int safety = attempts_per_cell;
+			int64 safety = attempts_per_cell;
 			Pint grid = Pint(xx * grid_width, yy * grid_height) + offset + Pint(skew.X*yy, skew.Y*xx);
 
 			do {
@@ -1261,8 +1368,8 @@ bool createDistributedRooms(Type_Tracker &system_types, const int attempts_per_c
 				choice *= 100.f;
 				//choice.toGrid(100.f);
 
-				//choice.X = (int)(choice.X) * 100.f;
-				//choice.Y = (int)(choice.Y) * 100.f;
+				//choice.X = (int64)(choice.X) * 100.f;
+				//choice.Y = (int64)(choice.Y) * 100.f;
 
 				if (createRoomAtPoint(system_types, choice, scale, created)) {
 					break;
@@ -1277,7 +1384,7 @@ bool createDistributedRooms(Type_Tracker &system_types, const int attempts_per_c
 	//_P choice = circularUniformPoint();
 }
 
-bool fillNullSpace(Type_Tracker &system_types, int safety = 100, int scale = 1, FLL<Region<Pint> *> *created = nullptr) {
+bool fillNullSpace(Type_Tracker &system_types, int64 safety = 100, int64 scale = 1, FLL<Region<Pint> *> *created = nullptr) {
 	while (!system_types.Nulls.empty() && (safety--) > 0) {
 
 		auto bounds = getBounds(system_types.Nulls.last());
@@ -1289,7 +1396,7 @@ bool fillNullSpace(Type_Tracker &system_types, int safety = 100, int scale = 1, 
 	return true;
 }
 
-bool createNearRooms(Type_Tracker &system_types, Region<Pint> * target, int attempts = 10, int scale = 1, FLL<Region<Pint> *> *created = nullptr, const UWorld* ref = nullptr) {
+bool createNearRooms(Type_Tracker &system_types, Region<Pint> * target, int64 attempts = 10, int64 scale = 1, FLL<Region<Pint> *> *created = nullptr, const UWorld* ref = nullptr) {
 	
 	//auto seeds = choosePointsNear(target, 3 * attempts, 4);
 
@@ -1349,22 +1456,22 @@ bool createLinkingHalls(Region<Pint> * target, FLL<Region<Pint> *> &nulls, FLL<R
 }
 
 struct building_region {
-	int size;
+	int64 size;
 	Region<Pint> * region;
 	building_region * parent;
-	building_region(int s, Region<Pint> * r) {
+	building_region(int64 s, Region<Pint> * r) {
 		size = s;
 		region = r;
 		parent = nullptr;
 	}
-	building_region(int s, Region<Pint> * r, building_region * p) {
+	building_region(int64 s, Region<Pint> * r, building_region * p) {
 		size = s;
 		region = r;
 		parent = p;
 	}
 };
 
-void create_Layout(Type_Tracker &system_types, int large, int medium, int small, UWorld* ref = nullptr) {
+void create_Layout(Type_Tracker &system_types, int64 large, int64 medium, int64 small, UWorld* ref = nullptr) {
 	//large is 10-14
 	//med is 7-11
 	//small is 4-8
@@ -1381,7 +1488,7 @@ void create_Layout(Type_Tracker &system_types, int large, int medium, int small,
 	//	larges.Push(new building_region(0, room));
 	//}
 
-	for (int ii = 0; ii < large; ii++) {
+	for (int64 ii = 0; ii < large; ii++) {
 		//pick point
 		auto point = boxUniformPoint(140,140) - Pint(70, 70);
 		//point.toGrid(P_micro_grid);
@@ -1466,7 +1573,7 @@ void Aroom_description_builder::Main_Generation_Loop() {
 	//float system_y = FMath::RandRange(2, 4) * 4;
 
 	//FMath::SRandInit(0);
-	FMath::RandInit(0);
+	//FMath::RandInit(0);
 
 	auto system_bounds = Square_Generator(100, 100, Pint(0,0));
 

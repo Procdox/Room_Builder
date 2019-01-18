@@ -62,3 +62,8 @@ FaceRelation contains(Region<Pint> * target, Pint const & test_point);
 FLL<Region<Pint> *> getNeighbors(Region<Pint> * target);
 
 void cleanRegion(Region<Pint> * target);
+
+//adds an edge between two edges within this region
+	//fails if edges do not belong to this region
+	//returns novel region if this splits the region
+Region<Pint> * RegionAdd(Region<Pint> * target, Edge<Pint> * A, Edge<Pint> * B);

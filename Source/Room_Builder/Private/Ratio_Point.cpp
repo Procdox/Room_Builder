@@ -15,7 +15,7 @@ Pint Pint::operator+(const Pint &target) const {
 Pint Pint::operator-(const Pint &target) const {
 	return Pint(X - target.X, Y - target.Y);
 }
-Pint Pint::operator*(int factor) const
+Pint Pint::operator*(int64 factor) const
 {
 	return Pint(X * factor, Y * factor);
 }
@@ -25,7 +25,7 @@ Pint Pint::operator*(rto factor) const {
 Pint Pint::operator*(const Pint &target) const {
 	return Pint(X * target.X, Y * target.Y);
 }
-Pint Pint::operator/(int factor) const
+Pint Pint::operator/(int64 factor) const
 {
 	return Pint(X / factor, Y / factor);
 }
@@ -46,7 +46,7 @@ Pint& Pint::operator-=(const Pint &target) {
 	Y -= target.Y;
 	return *this;
 }
-Pint & Pint::operator*=(int factor)
+Pint & Pint::operator*=(int64 factor)
 {
 	X *= factor;
 	Y *= factor;
@@ -64,7 +64,7 @@ Pint& Pint::operator*=(const Pint &target) {
 	Y *= target.Y;
 	return *this;
 }
-Pint & Pint::operator/=(int factor)
+Pint & Pint::operator/=(int64 factor)
 {
 	X /= factor;
 	Y /= factor;

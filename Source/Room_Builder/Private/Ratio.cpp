@@ -1,6 +1,7 @@
 #include "Ratio.h"
 
-int gcd(int a, int b) {
+
+int64 gcd(int64 a, int64 b) {
 	if (a == 0)
 		return b;
 	return gcd(b % a, a);
@@ -12,13 +13,13 @@ rto::rto()
 	d = 1;
 }
 
-rto::rto(int num)
+rto::rto(int64 num)
 {
 	n = num;
 	d = 1;
 }
 
-rto::rto(int num, int den)
+rto::rto(int64 num, int64 den)
 {
 	n = num;
 	d = den;
@@ -35,7 +36,7 @@ rto::rto(rto const & target) {
 	d = target.d;
 }
 
-rto & rto::operator=(int const & target)
+rto & rto::operator=(int64 const & target)
 {
 	n = target;
 	d = 1;
@@ -55,12 +56,12 @@ rto rto::operator-() const
 	return rto(-n,d);
 }
 
-rto rto::operator+(int factor) const
+rto rto::operator+(int64 factor) const
 {
-	int x = n + factor * d;
-	int y = d;
+	int64 x = n + factor * d;
+	int64 y = d;
 
-	int z = gcd(x, y);
+	int64 z = gcd(x, y);
 
 	if (y / z < 0) {
 		z *= -1;
@@ -71,10 +72,10 @@ rto rto::operator+(int factor) const
 
 rto rto::operator+(const rto & target) const
 {
-	int x = n * target.d + target.n * d;
-	int y = d * target.d;
+	int64 x = n * target.d + target.n * d;
+	int64 y = d * target.d;
 
-	int z = gcd(x, y);
+	int64 z = gcd(x, y);
 
 	if (y / z < 0) {
 		z *= -1;
@@ -83,12 +84,12 @@ rto rto::operator+(const rto & target) const
 	return rto(x / z, y / z);
 }
 
-rto rto::operator-(int factor) const
+rto rto::operator-(int64 factor) const
 {
-	int x = n - factor * d;
-	int y = d;
+	int64 x = n - factor * d;
+	int64 y = d;
 
-	int z = gcd(x, y);
+	int64 z = gcd(x, y);
 
 	if (y / z < 0) {
 		z *= -1;
@@ -99,10 +100,10 @@ rto rto::operator-(int factor) const
 
 rto rto::operator-(const rto & target) const
 {
-	int x = n * target.d - target.n * d;
-	int y = d * target.d;
+	int64 x = n * target.d - target.n * d;
+	int64 y = d * target.d;
 
-	int z = gcd(x, y);
+	int64 z = gcd(x, y);
 
 	if (y / z < 0) {
 		z *= -1;
@@ -111,12 +112,12 @@ rto rto::operator-(const rto & target) const
 	return rto(x / z, y / z);
 }
 
-rto rto::operator*(int factor) const
+rto rto::operator*(int64 factor) const
 {
-	int x = n * factor;
-	int y = d;
+	int64 x = n * factor;
+	int64 y = d;
 
-	int z = gcd(x, y);
+	int64 z = gcd(x, y);
 
 	if (y / z < 0) {
 		z *= -1;
@@ -127,10 +128,10 @@ rto rto::operator*(int factor) const
 
 rto rto::operator*(const rto & target) const
 {
-	int x = n * target.n;
-	int y = d * target.d;
+	int64 x = n * target.n;
+	int64 y = d * target.d;
 
-	int z = gcd(x, y);
+	int64 z = gcd(x, y);
 
 	if (y / z < 0) {
 		z *= -1;
@@ -139,12 +140,12 @@ rto rto::operator*(const rto & target) const
 	return rto(x / z, y / z);
 }
 
-rto rto::operator/(int factor) const
+rto rto::operator/(int64 factor) const
 {
-	int x = n;
-	int y = d * factor;
+	int64 x = n;
+	int64 y = d * factor;
 
-	int z = gcd(x, y);
+	int64 z = gcd(x, y);
 
 	if (y / z < 0) {
 		z *= -1;
@@ -155,10 +156,10 @@ rto rto::operator/(int factor) const
 
 rto rto::operator/(const rto & target) const
 {
-	int x = n * target.d;
-	int y = d * target.n;
+	int64 x = n * target.d;
+	int64 y = d * target.n;
 
-	int z = gcd(x, y);
+	int64 z = gcd(x, y);
 
 	if (y / z < 0) {
 		z *= -1;
@@ -167,12 +168,12 @@ rto rto::operator/(const rto & target) const
 	return rto(x / z, y / z);
 }
 
-rto & rto::operator+=(int factor)
+rto & rto::operator+=(int64 factor)
 {
-	int x = n + factor * d;
-	int y = d;
+	int64 x = n + factor * d;
+	int64 y = d;
 
-	int z = gcd(x, y);
+	int64 z = gcd(x, y);
 
 	n = x / z;
 	d = y / z;
@@ -187,10 +188,10 @@ rto & rto::operator+=(int factor)
 
 rto & rto::operator+=(const rto & target)
 {
-	int x = n * target.d + target.n * d;
-	int y = d * target.d;
+	int64 x = n * target.d + target.n * d;
+	int64 y = d * target.d;
 
-	int z = gcd(x, y);
+	int64 z = gcd(x, y);
 
 	n = x / z;
 	d = y / z;
@@ -203,12 +204,12 @@ rto & rto::operator+=(const rto & target)
 	return *this;
 }
 
-rto & rto::operator-=(int factor)
+rto & rto::operator-=(int64 factor)
 {
-	int x = n - factor * d;
-	int y = d;
+	int64 x = n - factor * d;
+	int64 y = d;
 
-	int z = gcd(x, y);
+	int64 z = gcd(x, y);
 
 	n = x / z;
 	d = y / z;
@@ -223,10 +224,10 @@ rto & rto::operator-=(int factor)
 
 rto & rto::operator-=(const rto & target)
 {
-	int x = n * target.d - target.n * d;
-	int y = d * target.d;
+	int64 x = n * target.d - target.n * d;
+	int64 y = d * target.d;
 
-	int z = gcd(x, y);
+	int64 z = gcd(x, y);
 
 	n = x / z;
 	d = y / z;
@@ -239,12 +240,12 @@ rto & rto::operator-=(const rto & target)
 	return *this;
 }
 
-rto & rto::operator*=(int factor)
+rto & rto::operator*=(int64 factor)
 {
-	int x = n * factor;
-	int y = d;
+	int64 x = n * factor;
+	int64 y = d;
 
-	int z = gcd(x, y);
+	int64 z = gcd(x, y);
 
 	n = x / z;
 	d = y / z;
@@ -259,10 +260,10 @@ rto & rto::operator*=(int factor)
 
 rto & rto::operator*=(const rto & target)
 {
-	int x = n * target.n;
-	int y = d * target.d;
+	int64 x = n * target.n;
+	int64 y = d * target.d;
 
-	int z = gcd(x, y);
+	int64 z = gcd(x, y);
 
 	n = x / z;
 	d = y / z;
@@ -275,12 +276,12 @@ rto & rto::operator*=(const rto & target)
 	return *this;
 }
 
-rto & rto::operator/=(int factor)
+rto & rto::operator/=(int64 factor)
 {
-	int x = n;
-	int y = d * factor;
+	int64 x = n;
+	int64 y = d * factor;
 
-	int z = gcd(x, y);
+	int64 z = gcd(x, y);
 
 	n = x / z;
 	d = y / z;
@@ -295,10 +296,10 @@ rto & rto::operator/=(int factor)
 
 rto & rto::operator/=(const rto & target)
 {
-	int x = n * target.d;
-	int y = d * target.n;
+	int64 x = n * target.d;
+	int64 y = d * target.n;
 
-	int z = gcd(x, y);
+	int64 z = gcd(x, y);
 
 	n = x / z;
 	d = y / z;
@@ -311,7 +312,7 @@ rto & rto::operator/=(const rto & target)
 	return *this;
 }
 
-bool rto::operator==(const int & test) const
+bool rto::operator==(const int64 & test) const
 {
 	return (n == test && d == 1);
 }
@@ -321,7 +322,7 @@ bool rto::operator==(const rto & target) const
 	return (n == target.n && d == target.d);
 }
 
-bool rto::operator!=(const int & test) const
+bool rto::operator!=(const int64 & test) const
 {
 	return (n != test || d != 1);
 }
@@ -331,7 +332,7 @@ bool rto::operator!=(const rto & target) const
 	return (n != target.n || d != target.d);
 }
 
-bool rto::operator>(const int & test) const
+bool rto::operator>(const int64 & test) const
 {
 	return n > test * d;
 }
@@ -341,7 +342,7 @@ bool rto::operator>(const rto & test) const
 	return n * test.d > test.n * d;
 }
 
-bool rto::operator<(const int & test) const
+bool rto::operator<(const int64 & test) const
 {
 	return n < test * d;
 }
@@ -351,7 +352,7 @@ bool rto::operator<(const rto & test) const
 	return n * test.d < test.n * d;
 }
 
-bool rto::operator>=(const int & test) const
+bool rto::operator>=(const int64 & test) const
 {
 	return n >= test * d;
 }
@@ -361,7 +362,7 @@ bool rto::operator>=(const rto & test) const
 	return n * test.d >= test.n * d;
 }
 
-bool rto::operator<=(const int & test) const
+bool rto::operator<=(const int64 & test) const
 {
 	return n <= test * d;
 }
