@@ -160,16 +160,16 @@ bool merge(Region<Pint> * a, Region<Pint> * b) {
 
 	//we have found a boundary pair that neighbors one another, merge them
 
+	a->remove(local_face);
+	b->remove(target_face);
+
 	auto tba = local_face->mergeWithFace(target_face);
 
-	//now edit the boundary lists of both regions
-	a->remove(local_face);
+	for (auto face : b->getBounds())
+		a->append(face);
 
-	for (auto face : tba) {
-		b->append(face);
-	}
-
-	a->clear();
+	for(auto face : tba)
+		a->append(face);
 
 	return true;
 }
@@ -376,7 +376,7 @@ bool markRegion(Region<Pint> * target, FLL<Pint> const & boundary, FLL<interact 
 }
 
 //returns if test is between A and B clockwise (right about the origin from A, left about from B)
-bool between(Pint A, Pint B, Pint test) {
+bool between(Pint const &A, Pint const &B, Pint const &test) {
 
 	Pint A_inward(A.Y, -A.X);
 	Pint B_inward(-B.Y, B.X);

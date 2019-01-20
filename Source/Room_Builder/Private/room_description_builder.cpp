@@ -252,9 +252,34 @@ namespace chord_splits
 		rto distance;
 	};
 
+	//returns if test is between A and B clockwise (right about the origin from A, left about from B)
+	bool betweenVectors(Pint const &A, Pint const &B, Pint const &test) {
+
+		Pint A_inward(A.Y, -A.X);
+		Pint B_inward(-B.Y, B.X);
+
+		rto bounds_relation = A_inward.Dot(B);
+
+		if (bounds_relation > 0) {
+			//the angle between bounds is in (0,180)
+			return A_inward.Dot(test) > 0 && B_inward.Dot(test) > 0;
+		}
+		else if (bounds_relation == 0) {
+			//the angle between bounds is 180 or 0, or one bound is length 0
+			//any case other than 180 is due to an error as used for determine interiors
+
+			return A_inward.Dot(test) > 0;
+		}
+		else {
+			//the angle between bounds is in (180,360)
+			return A_inward.Dot(test) > 0 || B_inward.Dot(test) > 0;
+		}
+	}
+
 	void chord_clean(Region<Pint> * target, rto const & thresh, FLL<Region<Pint> *> & ins, FLL<Region<Pint> *> & outs) {
 		//if no pair is small enough to split, add to ins and return
 		split_canidate result;
+		rto diameter = 0;
 		bool found_option = false;
 
 		FLL<Edge<Pint> *> relevants;
@@ -266,8 +291,18 @@ namespace chord_splits
 
 		for (auto edge : relevants) {
 			Pint A_start = edge->getEnd()->getPosition();
+			Pint A_before = edge->getStart()->getPosition();
+			Pint A_after = edge->getNext()->getEnd()->getPosition();
+
+			Pint A_left = A_before - A_start;
+			Pint A_right = A_after - A_start;
 
 			for (auto compare : relevants) {
+				rto raw = (compare->getStart()->getPosition() - A_start).SizeSquared();
+				if (raw > diameter) {
+					diameter = raw;
+				}
+
 				if (compare == edge || compare == edge->getNext() || compare == edge->getLast()) {
 					continue;
 				}
@@ -279,25 +314,38 @@ namespace chord_splits
 				Pint B_segment = B_end - B_start;
 				Pint B_perp(-B_segment.Y, B_segment.X);
 
+				if (!betweenVectors(A_right, A_left, B_perp))
+					continue;
+
+				Pint offset = A_start - B_start;
+
+				if (B_perp.Dot(offset) >= 0)
+					continue;
+
 				Pint intersect;
-				Pint::getIntersect(B_start, B_end, A_start, A_start + B_perp, intersect);
 
-				auto state = intersect.getState(B_start, B_end);
-
-				if (state == point_near_segment_state::before_segment)
+				if (offset.Dot(B_end - B_start) <= 0) {
 					intersect = B_start;
-				else if (state == point_near_segment_state::after_segment)
+					Pint B_last = compare->getLast()->getStart()->getPosition();
+
+					if (!betweenVectors(B_last - B_start, B_end - B_start, offset))
+						continue;
+				}
+				else if ((A_start - B_end).Dot(B_start - B_end) <= 0){
 					intersect = B_end;
 
-				if (intersect == edge->getNext()->getEnd()->getPosition() ||
-					intersect == edge->getStart()->getPosition() ||
-					intersect == compare->getStart()->getPosition())
-					continue;
+					Pint B_next = compare->getNext()->getEnd()->getPosition();
+
+					if (!betweenVectors(B_start - B_end, B_next - B_end, A_start - B_end))
+						continue;
+				}
+				else
+					Pint::getIntersect(B_start, B_end, A_start, A_start + B_perp, intersect);
 
 				rto distance = (intersect - A_start).SizeSquared();
 
 				if(distance < thresh)
-					if(contains(target, (intersect + A_start)/2 ).type == FaceRelationType::point_interior)
+					//if(contains(target, (intersect + A_start)/2 ).type == FaceRelationType::point_interior)
 						if (!found_option || distance < result.distance) {
 							found_option = true;
 							result.distance = distance;
@@ -308,9 +356,13 @@ namespace chord_splits
 						}
 			}
 		}
-
-		if (found_option) {
-			if (result.B != result.B_edge->getEnd()->getPosition()) {
+		if (diameter <= thresh) {
+			outs.push(target);
+		}
+		else if (found_option) {
+			if (result.B == result.B_edge->getStart()->getPosition()) {
+				result.B_edge = result.B_edge->getLast();
+			}else if (result.B != result.B_edge->getEnd()->getPosition()) {
 				//in-line, subdivide
 				result.B_edge->subdivide(result.B);
 			}
@@ -345,21 +397,10 @@ namespace chord_splits
 			}
 			
 
-			if (P == nullptr) {
-				chord_clean(target, thresh, ins, outs);
-			}
-			else {
+			chord_clean(target, thresh, ins, outs);
 
-				//if either is a triangle, DELETE
-				if (result.A_edge->getNext()->getNext()->getNext() == result.A_edge)
-					outs.push(target);
-				else
-					chord_clean(target, thresh, ins, outs);
-
-				if (result.B_edge->getNext()->getNext()->getNext() == result.B_edge)
-					outs.push(P);
-				else
-					chord_clean(P, thresh, ins, outs);
+			if (P != nullptr) {
+				chord_clean(P, thresh, ins, outs);
 			}
 		}
 		else
@@ -835,7 +876,7 @@ struct Type_Tracker {
 		for (auto null : Nulls) {
 			cleanRegion(null);
 			for (auto border : null->getBounds())
-				Draw_Border(toFVector(border->getLoopPoints()), 65, world, color_red);
+				Draw_Border(toFVector(border->getLoopPoints()), 60, world, color_red);
 		}
 
 		for (auto hall : Halls) {
@@ -875,9 +916,8 @@ void mergeGroup(FLL<Region<Pint> *> & nulls) {
 
 			++compare;
 
-			merge(*focus, v);
-
-			nulls.remove(v);
+			if (merge(*focus, v))
+				nulls.remove(v);
 		}
 	}
 }
@@ -888,7 +928,7 @@ void cleanNulls(Type_Tracker &target) {
 	FLL<Region<Pint> *> input_nulls;
 	input_nulls.absorb(target.Nulls);
 	input_nulls.absorb(target.Halls);
-	//input_nulls.Append(target.Smalls);
+	input_nulls.absorb(target.Smalls);
 	mergeGroup(input_nulls);
 
 	for (auto focus : input_nulls) {
@@ -908,6 +948,18 @@ void cleanNulls(Type_Tracker &target) {
 		target.Halls.absorb(hall_ins);
 		target.Smalls.absorb(hall_outs);
 	}
+
+	for (auto region : target.Rooms)
+		cleanRegion(region);
+
+	for(auto region : target.Nulls)
+		cleanRegion(region);
+
+	for (auto region : target.Halls)
+		cleanRegion(region);
+
+	for (auto region : target.Smalls)
+		cleanRegion(region);
 
 	mergeGroup(target.Smalls);
 }
@@ -1497,9 +1549,9 @@ void create_Layout(Type_Tracker &system_types, int64 large, int64 medium, int64 
 		if (createRoomAtPoint(system_types, point, 7, &temp_created))
 			UE_LOG(LogTemp, Warning, TEXT("Created %d sub-rooms \n"), temp_created.size());
 
-		for (auto room : temp_created) {
-			larges.Push(new building_region(0, room));
-		}
+		//for (auto room : temp_created) {
+		//	larges.Push(new building_region(0, room));
+		//}
 	}
 
 	/*{
@@ -1525,7 +1577,7 @@ void create_Layout(Type_Tracker &system_types, int64 large, int64 medium, int64 
 	}*/
 
 
-	UE_LOG(LogTemp, Warning, TEXT("Larges created: %d\n"), larges.Num());
+	//UE_LOG(LogTemp, Warning, TEXT("Larges created: %d\n"), larges.Num());
 
 	/*FLL<Face<Pint> *> temp_created;
 	createRoomAtPoint(system_types, _P(10 * grid_coef, -10 * grid_coef), 1, &temp_created);
@@ -1568,34 +1620,16 @@ void Aroom_description_builder::Main_Generation_Loop() {
 	DCEL<Pint> system_new;
 	Type_Tracker system_types;
 
-	//generate enclosure (null space)
-	//float system_x = FMath::RandRange(5, 9) * 4;
-	//float system_y = FMath::RandRange(2, 4) * 4;
-
-	//FMath::SRandInit(0);
-	//FMath::RandInit(0);
+	FMath::SRandInit(0);
+	FMath::RandInit(0);
 
 	auto system_bounds = Square_Generator(100, 100, Pint(0,0));
 
 	Draw_Border(toFVector(system_bounds), 0, GetWorld());
 	
 	system_types.Nulls.append(system_new.region(system_bounds));
-	//system_types.Nulls.Push(system_new.createUniverse()); system_new.draw(system_bounds)
 
-	create_Layout(system_types, 10, 3, 2, GetWorld());
-
-	//generate MAIN Region<Pint>
-	//createRoomAtPoint(system_types, _P(0, 0), 4);
-
-	//createNearRooms(system_types, *system_types.Rooms[0], 5, 2);
-
-	//generate offset regions
-
-	//createDistributedRooms(system_types);
-
-	//fillNullSpace(system_types);
-
-	//mergeSmalls(system_types);
+	create_Layout(system_types, 5, 3, 2, GetWorld());
 
 	system_types.display(GetWorld());
 }

@@ -387,6 +387,7 @@ public:
 			inv->root->root = next;
 			next->last = inv->last;
 			inv->last->next = next;
+			loop->root = next;
 		}
 
 		if (last == inv) {
@@ -400,6 +401,7 @@ public:
 			root->root = inv->next;
 			last->next = inv->next;
 			inv->next->last = last;
+			loop->root = last;
 		}
 
 		//we may be connecting or disconnecting two loops
@@ -701,6 +703,9 @@ class Region {
 
 	}
 	FLL<Face<_P> *> Boundaries;
+
+	Region(Region<_P> &&) = delete;
+	Region(Region<_P> const &) = delete;
 
 public:
 	FLL<Face<_P> *> const & getBounds() {
