@@ -276,10 +276,11 @@ namespace chord_splits
 		}
 	}
 
+#define debug_chords
 	void chord_clean(Region<Pint> * target, rto const & thresh, FLL<Region<Pint> *> & ins, FLL<Region<Pint> *> & outs) {
 		//if no pair is small enough to split, add to ins and return
 		split_canidate result;
-		rto diameter = 0;
+		rto diameter = thresh + 1;
 		bool found_option = false;
 
 		FLL<Edge<Pint> *> relevants;
@@ -288,27 +289,39 @@ namespace chord_splits
 			auto r = border->getLoopEdges();
 			relevants.absorb(r);
 		}
-
+#ifdef debug_chords
+		UE_LOG(LogTemp, Warning, TEXT("cleaning..."));
+#endif
 		for (auto edge : relevants) {
 			Pint A_start = edge->getEnd()->getPosition();
 			Pint A_before = edge->getStart()->getPosition();
 			Pint A_after = edge->getNext()->getEnd()->getPosition();
 
+			Pint A = A_start - A_before;
+
 			Pint A_left = A_before - A_start;
 			Pint A_right = A_after - A_start;
 
+			rto min_offset = linear_offset(A, A_start);
+			rto max_offset = linear_offset(A, A_start);
+
 			for (auto compare : relevants) {
-				rto raw = (compare->getStart()->getPosition() - A_start).SizeSquared();
-				if (raw > diameter) {
-					diameter = raw;
-				}
+				Pint B_start = compare->getStart()->getPosition();
+
+				rto raw = linear_offset(A, B_start);
+
+				if (min_offset > raw)
+					min_offset = raw;
+
+				if (max_offset < raw)
+					max_offset = raw;
 
 				if (compare == edge || compare == edge->getNext() || compare == edge->getLast()) {
 					continue;
 				}
 
 				//get smallest points
-				Pint B_start = compare->getStart()->getPosition();
+				
 				Pint B_end = compare->getEnd()->getPosition();
 
 				Pint B_segment = B_end - B_start;
@@ -345,18 +358,33 @@ namespace chord_splits
 				rto distance = (intersect - A_start).SizeSquared();
 
 				if(distance < thresh)
-					//if(contains(target, (intersect + A_start)/2 ).type == FaceRelationType::point_interior)
-						if (!found_option || distance < result.distance) {
-							found_option = true;
-							result.distance = distance;
-							result.A_edge = edge;
-							result.B_edge = compare;
-							result.A = A_start;
-							result.B = intersect;
-						}
+					if (!found_option || distance < result.distance) {						
+						found_option = true;
+						result.distance = distance;
+						result.A_edge = edge;
+						result.B_edge = compare;
+						result.A = A_start;
+						result.B = intersect;
+#ifdef debug_chords
+						UE_LOG(LogTemp, Warning, TEXT("split: (%f,%f) to (%f,%f), distance %f"), result.A.X.toFloat(),
+							result.A.Y.toFloat(), result.B.X.toFloat(), result.B.Y.toFloat(), result.distance.toFloat());
+#endif
+					}
 			}
+
+			rto t = max_offset - min_offset;
+
+			rto offset = t * t * (A.X * A.X + A.Y * A.Y);
+#ifdef debug_chords
+			UE_LOG(LogTemp, Warning, TEXT("offset: %f"), offset.toFloat());
+#endif
+			if (offset < diameter)
+				diameter = offset;
 		}
 		if (diameter <= thresh) {
+#ifdef debug_chords
+			UE_LOG(LogTemp, Warning, TEXT("removed... \n"));
+#endif
 			outs.push(target);
 		}
 		else if (found_option) {
@@ -368,6 +396,8 @@ namespace chord_splits
 			}
 			//split now occurs at end of A_edge and B_edge
 
+#ifdef debug_chords
+			UE_LOG(LogTemp, Warning, TEXT("subdividing \n"));
 			//split
 			UE_LOG(LogTemp, Warning, TEXT("Orig"));
 			for (auto face : target->getBounds()) {
@@ -376,9 +406,10 @@ namespace chord_splits
 					UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.toFloat(), point.Y.toFloat());
 				}
 			}
-
+#endif
 			auto P = RegionAdd(target, result.A_edge, result.B_edge);
 
+#ifdef debug_chords
 			UE_LOG(LogTemp, Warning, TEXT("Result target"));
 			for (auto face : target->getBounds()) {
 				UE_LOG(LogTemp, Warning, TEXT("Face"));
@@ -395,6 +426,9 @@ namespace chord_splits
 					}
 				}
 			}
+
+			UE_LOG(LogTemp, Warning, TEXT(" \n"));
+#endif
 			
 
 			chord_clean(target, thresh, ins, outs);
@@ -403,8 +437,12 @@ namespace chord_splits
 				chord_clean(P, thresh, ins, outs);
 			}
 		}
-		else
+		else {
+#ifdef debug_chords
+			UE_LOG(LogTemp, Warning, TEXT("added... \n"));
+#endif
 			ins.push(target);
+		}
 	}
 }
 
@@ -873,10 +911,11 @@ struct Type_Tracker {
 				Draw_Border(toFVector(border->getLoopPoints()), 70, world, color_blue);
 		}
 
+		int i = 0;
 		for (auto null : Nulls) {
 			cleanRegion(null);
 			for (auto border : null->getBounds())
-				Draw_Border(toFVector(border->getLoopPoints()), 60, world, color_red);
+				Draw_Border(toFVector(border->getLoopPoints()), 30 + (i++)*5, world, color_red);
 		}
 
 		for (auto hall : Halls) {
@@ -926,28 +965,34 @@ void cleanNulls(Type_Tracker &target) {
 	UE_LOG(LogTemp, Warning, TEXT("Clean Nulls\n"));
 
 	FLL<Region<Pint> *> input_nulls;
+	FLL<Region<Pint> *> input_halls;
 	input_nulls.absorb(target.Nulls);
-	input_nulls.absorb(target.Halls);
-	input_nulls.absorb(target.Smalls);
 	mergeGroup(input_nulls);
 
 	for (auto focus : input_nulls) {
 
 		FLL<Region<Pint> *> room_ins;
 		FLL<Region<Pint> *> room_outs;
-		FLL<Region<Pint> *> hall_ins;
-		FLL<Region<Pint> *> hall_outs;
 
 		chord_splits::chord_clean(focus, room_min_width, room_ins, room_outs);
 
-		for (auto out : room_outs) {
-			chord_splits::chord_clean(out, hall_min_width, hall_ins, hall_outs);
-		}
-
 		target.Nulls.absorb(room_ins);
+		input_halls.absorb(room_outs);
+	}
+
+	for (auto focus : input_halls) {
+
+		FLL<Region<Pint> *> hall_ins;
+		FLL<Region<Pint> *> hall_outs;
+
+		chord_splits::chord_clean(focus, hall_min_width, hall_ins, hall_outs);
+
 		target.Halls.absorb(hall_ins);
 		target.Smalls.absorb(hall_outs);
 	}
+
+	mergeGroup(target.Halls);
+	mergeGroup(target.Smalls);
 
 	for (auto region : target.Rooms)
 		cleanRegion(region);
@@ -960,8 +1005,6 @@ void cleanNulls(Type_Tracker &target) {
 
 	for (auto region : target.Smalls)
 		cleanRegion(region);
-
-	mergeGroup(target.Smalls);
 }
 
 /*void mergeSmalls(Type_Tracker &target) {
@@ -1629,7 +1672,7 @@ void Aroom_description_builder::Main_Generation_Loop() {
 	
 	system_types.Nulls.append(system_new.region(system_bounds));
 
-	create_Layout(system_types, 5, 3, 2, GetWorld());
+	create_Layout(system_types, 12, 3, 2, GetWorld());
 
 	system_types.display(GetWorld());
 }
