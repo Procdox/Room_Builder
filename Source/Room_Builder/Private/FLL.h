@@ -322,6 +322,9 @@ public:
 			if (after->value == search) {
 				focus->next = after->next;
 
+				if (after == tail)
+					tail = focus;
+
 				delete after;
 				length--;
 
@@ -363,6 +366,9 @@ public:
 
 			if (after->value == search) {
 				focus->next = after->next;
+
+				if (after == tail)
+					tail = focus;
 
 				delete after;
 				count++;

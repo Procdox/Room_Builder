@@ -43,7 +43,7 @@ def all(f, a):
     for i in range(0,len(faces)):
         s(faces[i], a[i])
 
-all("orig.txt",['k','k','r:','r:','b:','b:','b:'])
+all("orig.txt",['k-','r:','r:','b:','b:','b:'])
 
 #ax.axis('equal')
 ax.set_aspect('equal', 'box')

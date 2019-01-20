@@ -277,6 +277,7 @@ namespace chord_splits
 	}
 
 #define debug_chords
+
 	void chord_clean(Region<Pint> * target, rto const & thresh, FLL<Region<Pint> *> & ins, FLL<Region<Pint> *> & outs) {
 		//if no pair is small enough to split, add to ins and return
 		split_canidate result;
@@ -446,72 +447,6 @@ namespace chord_splits
 	}
 }
 
-
-
-//==========================================================================================================
-//===================================== polytree utilities =================================================
-//==========================================================================================================
-
-namespace polytree_utils
-{
-	using namespace ClipperLib;
-
-	void AllocateNode(PolyNode * ref, FLL<Region<Pint> *> targets, FLL<Region<Pint> *> &ins, FLL<Region<Pint> *> &outs, FLL<Pint> const &suggestions) {
-
-		auto contour = fromPath(ref->Contour, suggestions);
-
-		FLL<Region<Pint> *> relative_outs;
-		FLL<Region<Pint> *> relative_ins;
-
-		for (auto target : targets) {
-			UE_LOG(LogTemp, Warning, TEXT("SA - allocate node\n"));
-			subAllocate(target, contour, relative_outs, relative_ins);
-		}
-
-		for (auto outer : ref->Childs) {
-			FLL<Region<Pint> *> novel_ins;
-
-			AllocateNode(outer, relative_ins, novel_ins, outs, suggestions);
-
-			relative_ins.clear();
-			relative_ins.absorb(novel_ins);
-		}
-
-		ins.absorb(relative_ins);
-		outs.absorb(relative_outs);
-	}
-
-	void AllocateTree(PolyTree & ref, FLL<Region<Pint> *> targets, FLL<Region<Pint> *> &ins, FLL<Region<Pint> *> &outs) {
-
-		FLL<Pint> suggestions;
-		for (auto target : targets) {
-			for (auto border : target->getBounds()) {
-				auto points = border->getLoopPoints();
-				suggestions.absorb(points);
-			}
-		}
-
-		for (auto outer : ref.Childs) {
-			FLL<Region<Pint> *> novel_outs;
-
-			AllocateNode(outer, targets, ins, novel_outs, suggestions);
-
-			targets.clear();
-			targets.absorb(novel_outs);
-		}
-
-		outs.absorb(targets);
-	}
-
-	void AllocateTree(PolyTree & ref, Region<Pint> * target, FLL<Region<Pint> *> &ins, FLL<Region<Pint> *> &outs) {
-
-		FLL<Region<Pint> *> targets;
-		targets.append(target);
-
-		AllocateTree(ref, targets, ins, outs);
-	}
-}
-
 //==========================================================================================================
 //=================================== triangulate utilities ================================================
 //==========================================================================================================
@@ -625,71 +560,6 @@ namespace tri_utils
 	}
 
 }
-
-//==========================================================================================================
-//==================================== clipper utilities ===================================================
-//==========================================================================================================
-
-void makeTree(ClipperLib::Paths &source, ClipperLib::PolyTree & result) {
-	result.Clear();
-
-	ClipperLib::Clipper clip;
-
-	clip.AddPaths(source, ClipperLib::ptSubject, true);
-
-	clip.Execute(ClipperLib::ctUnion, result);
-}
-
-ClipperLib::Paths sizeRestrictPaths(ClipperLib::Paths &source, int64 radius) {
-	ClipperLib::Paths result;
-
-	ClipperLib::Paths reduced;
-	ClipperLib::Paths expanded;
-
-	ClipperLib::ClipperOffset clipper_reducer;
-	ClipperLib::ClipperOffset clipper_expander;
-
-	clipper_expander.MiterLimit = 100;
-
-	clipper_reducer.AddPaths(source, ClipperLib::jtMiter, ClipperLib::etClosedPolygon);
-	clipper_reducer.Execute(reduced, -radius);
-
-	clipper_expander.AddPaths(reduced, ClipperLib::jtMiter, ClipperLib::etClosedPolygon);
-	clipper_expander.Execute(expanded, radius);
-
-	ClipperLib::Clipper clipper_restriction;
-
-	clipper_restriction.AddPaths(expanded, ClipperLib::ptSubject, true);
-	clipper_restriction.AddPaths(source, ClipperLib::ptClip, true);
-	clipper_restriction.Execute(ClipperLib::ctIntersection, result);
-
-	return result;
-}
-
-ClipperLib::Paths addPaths(ClipperLib::Paths &source, ClipperLib::Paths &add) {
-	ClipperLib::Paths result;
-
-	ClipperLib::Clipper clip;
-
-	clip.AddPaths(source, ClipperLib::ptSubject, true);
-	clip.AddPaths(add, ClipperLib::ptClip, true);
-	clip.Execute(ClipperLib::ctUnion, result);
-
-	return result;
-}
-
-ClipperLib::Paths subtractPaths(ClipperLib::Paths &source, ClipperLib::Paths &sub) {
-	ClipperLib::Paths result;
-
-	ClipperLib::Clipper clip;
-
-	clip.AddPaths(source, ClipperLib::ptSubject, true);
-	clip.AddPaths(sub, ClipperLib::ptClip, true);
-	clip.Execute(ClipperLib::ctDifference, result);
-
-	return result;
-}
-
 
 //==========================================================================================================
 //======================================== creation ========================================================
@@ -924,11 +794,6 @@ struct Type_Tracker {
 				Draw_Border(toFVector(border->getLoopPoints()), 74, world, color_green);
 		}
 	}
-	//void Safety() {
-	//	for (auto room : Rooms) {
-	//		check(room->getDad() != NULL);
-	//	}
-	//}
 };
 
 bool Cull_Suggested(Region<Pint> * target, FLL<Region<Pint> *> &results, FLL<Region<Pint> *> &nulls) {
@@ -1327,7 +1192,6 @@ FLL<Pint> Pick_Generator(rto x, rto y, Pint center) {
 //void Generate_Building_Shape(Face<Pint>* Available, Type_Tracker &system_types) {
 	//generates a set of trackers for each building Region<Pint>
 	//these come with predefined nulls and infrastructure halls
-
 //}
 
 bool createRoomAtPoint(Type_Tracker &system_types, Pint const &point, int64 scale = 1, FLL<Region<Pint> *> * created = nullptr) {
@@ -1386,55 +1250,6 @@ bool createRoomAtPoint(Type_Tracker &system_types, Pint const &point, int64 scal
 
 	return success;
 }
-
-bool fakeCreate(Type_Tracker &system_types, Pint const &point, generatorFunc style, int64 width, int64 length, FLL<Region<Pint> *> * created = nullptr) {
-	UE_LOG(LogTemp, Warning, TEXT("Create Room At Point %f,%f"), point.X.toFloat(), point.Y.toFloat());
-	FLL<Region<Pint> *> created_rooms;
-	FLL<Region<Pint> *> created_nulls;
-	FLL<Region<Pint> *> raw_faces;
-
-	Region<Pint> * choice = nullptr;
-
-	//find containing null
-	for (auto null : system_types.Nulls) {
-		if (contains(null, point).type != FaceRelationType::point_exterior) {
-			choice = null;
-			break;
-		}
-	}
-
-	if (choice == nullptr) {
-		UE_LOG(LogTemp, Warning, TEXT("Selected point is not in a null region\n"));
-		return false;
-	}
-
-	system_types.Nulls.remove(choice);
-
-	auto bounds = style(width * 7, length * 7, point);
-
-	//cull to null Region<Pint>
-	subAllocate(choice, bounds, created_nulls, created_rooms);
-
-	//remerge rejected regions with nulls
-	for (auto face : raw_faces) {
-		Cull_Suggested(face, created_rooms, created_nulls);
-	}
-
-	system_types.Nulls.absorb(created_nulls);
-
-	cleanNulls(system_types);
-
-	if (created != nullptr) {
-		created->append(created_rooms);
-	}
-
-	bool success = !created_rooms.empty();
-
-	system_types.Rooms.absorb(created_rooms);
-
-	return success;
-}
-
 //attempts to create rooms distributed evenly across the space
 bool createDistributedRooms(Type_Tracker &system_types, const int64 attempts_per_cell = 5, int64 scale = 1, FLL<Region<Pint> *> *created = nullptr) {
 	//GRID METHOD
@@ -1672,7 +1487,7 @@ void Aroom_description_builder::Main_Generation_Loop() {
 	
 	system_types.Nulls.append(system_new.region(system_bounds));
 
-	create_Layout(system_types, 12, 3, 2, GetWorld());
+	create_Layout(system_types, room_count, 3, 2, GetWorld());
 
 	system_types.display(GetWorld());
 }
