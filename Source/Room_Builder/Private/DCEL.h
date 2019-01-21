@@ -668,9 +668,9 @@ public:
 		Edge<_P> * focus = root;
 		do {
 
-			if (focus->inv->loop == target) {
-				markToRemove.append(focus);
-			}
+			if (focus->inv->loop == target)
+				if(!markToRemove.contains(focus->inv))
+					markToRemove.append(focus);
 
 			focus = focus->next;
 		} while (focus != root);

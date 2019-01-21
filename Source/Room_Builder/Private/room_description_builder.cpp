@@ -342,7 +342,7 @@ namespace chord_splits
 					intersect = B_start;
 					Pint B_last = compare->getLast()->getStart()->getPosition();
 
-					if (!betweenVectors(B_last - B_start, B_end - B_start, offset))
+					if (!betweenVectors(B_end - B_start, B_last - B_start, offset))
 						continue;
 				}
 				else if ((A_start - B_end).Dot(B_start - B_end) <= 0){
@@ -362,14 +362,17 @@ namespace chord_splits
 					if (!found_option || distance < result.distance) {						
 						found_option = true;
 						result.distance = distance;
-						result.A_edge = edge;
-						result.B_edge = compare;
+						
 						result.A = A_start;
 						result.B = intersect;
+
 #ifdef debug_chords
 						UE_LOG(LogTemp, Warning, TEXT("split: (%f,%f) to (%f,%f), distance %f"), result.A.X.toFloat(),
 							result.A.Y.toFloat(), result.B.X.toFloat(), result.B.Y.toFloat(), result.distance.toFloat());
 #endif
+
+						result.A_edge = edge;
+						result.B_edge = compare;
 					}
 			}
 
@@ -856,6 +859,7 @@ void cleanNulls(Type_Tracker &target) {
 		target.Smalls.absorb(hall_outs);
 	}
 
+	mergeGroup(target.Nulls);
 	mergeGroup(target.Halls);
 	mergeGroup(target.Smalls);
 
@@ -1166,6 +1170,20 @@ FLL<Pint> Bevel_Generator(rto x, rto y, Pint center) {
 
 	return boundary;
 }
+FLL<Pint> Rectangle_Generator(rto x, rto y, Pint center) {
+	rto skew = (int64)FMath::RandRange((float)0, (float)10);
+	Pint angle(skew / 10, (rto(10) - skew) / 10);
+	Pint perp((skew - 10) / 10, skew / 10);
+
+	FLL<Pint> boundary;
+
+	boundary.append(center - angle * x - perp * y);
+	boundary.append(center - angle * x + perp * y);
+	boundary.append(center + angle * x + perp * y);
+	boundary.append(center + angle * x - perp * y);
+
+	return boundary;
+}
 
 typedef FLL<Pint> (*generatorFunc)(rto, rto, Pint);
 
@@ -1223,7 +1241,7 @@ bool createRoomAtPoint(Type_Tracker &system_types, Pint const &point, int64 scal
 
 	UE_LOG(LogTemp, Warning, TEXT("size: %d %d"), width, length);
 
-	auto bounds = Pick_Generator(width * scale, length * scale, point);
+	auto bounds = Rectangle_Generator(width * scale, length * scale, point);
 
 	
 
