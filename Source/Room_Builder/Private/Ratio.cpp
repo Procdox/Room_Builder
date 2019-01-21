@@ -72,8 +72,10 @@ rto rto::operator+(int64 factor) const
 
 rto rto::operator+(const rto & target) const
 {
-	int64 x = n * target.d + target.n * d;
-	int64 y = d * target.d;
+	int64 g = gcd(target.d, d);
+
+	int64 x = n * (target.d / g) + target.n * (d / g);
+	int64 y = d * (target.d / g);
 
 	int64 z = gcd(x, y);
 
@@ -100,8 +102,10 @@ rto rto::operator-(int64 factor) const
 
 rto rto::operator-(const rto & target) const
 {
-	int64 x = n * target.d - target.n * d;
-	int64 y = d * target.d;
+	int64 g = gcd(target.d, d);
+
+	int64 x = n * (target.d / g) - target.n * (d / g);
+	int64 y = d * (target.d / g);
 
 	int64 z = gcd(x, y);
 
@@ -188,8 +192,10 @@ rto & rto::operator+=(int64 factor)
 
 rto & rto::operator+=(const rto & target)
 {
-	int64 x = n * target.d + target.n * d;
-	int64 y = d * target.d;
+	int64 g = gcd(target.d, d);
+
+	int64 x = n * (target.d/g) + target.n * (d/g);
+	int64 y = d * (target.d/g);
 
 	int64 z = gcd(x, y);
 
@@ -224,8 +230,10 @@ rto & rto::operator-=(int64 factor)
 
 rto & rto::operator-=(const rto & target)
 {
-	int64 x = n * target.d - target.n * d;
-	int64 y = d * target.d;
+	int64 g = gcd(target.d, d);
+
+	int64 x = n * (target.d / g) - target.n * (d / g);
+	int64 y = d * (target.d / g);
 
 	int64 z = gcd(x, y);
 

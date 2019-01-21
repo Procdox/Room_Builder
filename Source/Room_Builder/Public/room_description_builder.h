@@ -64,6 +64,7 @@ public:
 	// Sets default values for this actor's properties
 	Aroom_description_builder();
 
+	void CreateWall(Pint const & wall_left, Pint const & wall_right, float bottom, float top);
 	void CreateDoor(Pint const & wall_left, Pint const & wall_right, float bottom, float top);
 
 	void Create_Floor_Ceiling_New(Region<Pint> * source, float bottom, float top);

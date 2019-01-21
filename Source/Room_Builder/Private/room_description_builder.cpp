@@ -12,150 +12,14 @@
 //==========================================================================================================
 
 FVector2D convert(Pint const &target) {
-	return FVector2D(target.X.toFloat(), target.Y.toFloat());
-}
-
-ClipperLib::Path toPath(FLL<Pint> const &target) {
-	ClipperLib::Path product;
-	for (auto point : target) {
-		auto temp = point * 100;
-		product.insert(product.begin(), ClipperLib::IntPoint(temp.X.toFloat(), temp.Y.toFloat()));
-	}
-	return product;
-}
-
-ClipperLib::Paths toPaths(Region<Pint> * target) {
-	ClipperLib::Paths product;
-
-	for (auto border : target->getBounds()) {
-		product.push_back(toPath(border->getLoopPoints()));
-	}
-
-	return product;
-}
-
-FLL<Pint> fromPath(ClipperLib::Path const &target, FLL<Pint> const &suggestions) {
-	FLL<Pint> product;
-
-	FLL<FLL<Pint>::FLL_iterator_c> leads;
-
-	for (auto point : target) {
-
-		Pint raw(point.X, point.Y);
-		raw /= 100;
-
-		rto best_distance = 1;
-		best_distance /= 10;
-
-		//Pint choice = raw;
-
-		FLL<Pint>::FLL_iterator_c choice = suggestions.end();
-
-		for (auto compare = suggestions.begin(); compare != suggestions.end(); ++compare) {
-
-			Pint target = *(compare.cyclic_next());
-
-			Pint offset = (raw - target);
-
-			if (offset.Y < 0)
-				offset.Y *= -1;
-			if (offset.X < 0)
-				offset.X *= -1;
-
-			rto distance = offset.Y;
-
-			if (offset.X > offset.Y) {
-				distance = offset.X;
-			}
-
-			if (distance < best_distance) {
-				choice = compare;
-
-				best_distance = distance;
-
-				if (distance == 0) break;
-			}
-		}
-
-		leads.append(choice);
-		//if(choice != suggestions.end())
-		//	product.append(*(choice.cyclic_next()));
-		//else
-		product.append(raw);
-	}
-
-	FLL<Pint> result;
-
-	auto focus = product.begin().cyclic_next();
-	auto kill = suggestions.end();
-
-	for (auto lead = leads.begin(); lead != leads.end(); ++lead) {
-
-		auto next = lead.cyclic_next();
-		auto after = lead.cyclic_next().cyclic_next();
-
-		if (*next != kill) {
-
-			Pint project = *((*next).cyclic_next());
-			//*(compare.cyclic_next());
-			//*(choice.cyclic_next())
-			UE_LOG(LogTemp, Warning, TEXT("point is stable: (%f,%f) => (%f, %f)"),(*focus).X.toFloat(), (*focus).Y.toFloat(), project.X.toFloat(), project.Y.toFloat());
-			result.push(project);
-			//result.push(*focus);
-		}
-		else {
-			if (*lead != kill) {
-				if (*after != kill) {
-					
-					Pint project;
-
-					Pint A_S = *((*lead).cyclic_next());
-					Pint A_E = *((*lead));
-					Pint B_S = *((*after).cyclic_next());
-					Pint B_E = *((*after).cyclic_next().cyclic_next());
-
-					Pint::getIntersect(A_S, A_E, B_S, B_E, project);
-
-					UE_LOG(LogTemp, Warning, TEXT("projecting to solve for next with both: (%f,%f) => (%f,%f)"), (*focus).X.toFloat(), (*focus).Y.toFloat(), project.X.toFloat(), project.Y.toFloat());
-
-					result.push(project);
-				}
-				else {
-					UE_LOG(LogTemp, Warning, TEXT("HMM solve for next with just this: (%f,%f)"), (*focus).X.toFloat(), (*focus).Y.toFloat());
-					result.push(*focus);
-				}
-			}
-			else {
-				if (*(lead.cyclic_next().cyclic_next()) != kill) {
-					UE_LOG(LogTemp, Warning, TEXT("HMM solve for next with just after: (%f,%f)"), (*focus).X.toFloat(), (*focus).Y.toFloat());
-					result.push(*focus);
-				}
-				else {
-					UE_LOG(LogTemp, Warning, TEXT("FUCK solve for next with NOTHING: (%f,%f)"), (*focus).X.toFloat(), (*focus).Y.toFloat());
-					result.push(*focus);
-				}
-			}
-		}
-
-		focus = focus.cyclic_next();
-	}
-
-	//UE_LOG(LogTemp, Warning, TEXT("unlocked"));
-	//for(auto point : product)
-	//	UE_LOG(LogTemp, Warning, TEXT("(%f, %f)"), point.X.toFloat(), point.Y.toFloat());
-	//
-	//UE_LOG(LogTemp, Warning, TEXT("locked"));
-	//for (auto point : result)
-	//	UE_LOG(LogTemp, Warning, TEXT("(%f, %f)"), point.X.toFloat(), point.Y.toFloat());
-
-	return result;
+	return FVector2D(target.X.toFloat() * 10, target.Y.toFloat() * 10);
 }
 
 TArray<FVector2D> toFVector(FLL<Pint> const &target) {
 	TArray<FVector2D> product;
 
 	for (auto point : target) {
-		product.Push(FVector2D(point.X.toFloat(), point.Y.toFloat()));
+		product.Push(convert(point));
 	}
 
 	return product;
@@ -177,8 +41,8 @@ void Draw_Border(const TArray<FVector2D> &border, float height, const UWorld *re
 
 		DrawDebugLine(
 			ref,
-			FVector(border[index]*10, height + offset * 5),
-			FVector(border[next]*10, height + offset * 5),
+			FVector(border[index], height + offset * 5),
+			FVector(border[next], height + offset * 5),
 			//FColor(FMath::RandRange(0,255), FMath::RandRange(0, 255), FMath::RandRange(0, 255)),
 			color,
 			true,
@@ -276,7 +140,40 @@ namespace chord_splits
 		}
 	}
 
-#define debug_chords
+	struct bvs {
+		Pint A_inward;
+		Pint B_inward;
+		rto bounds_relation;
+
+		bool test(Pint const &test) const {
+			if (bounds_relation > 0) {
+				//the angle between bounds is in (0,180)
+				return A_inward.Dot(test) > 0 && B_inward.Dot(test) > 0;
+			}
+			else if (bounds_relation == 0) {
+				//the angle between bounds is 180 or 0, or one bound is length 0
+				//any case other than 180 is due to an error as used for determine interiors
+
+				return A_inward.Dot(test) > 0;
+			}
+			else {
+				//the angle between bounds is in (180,360)
+				return A_inward.Dot(test) > 0 || B_inward.Dot(test) > 0;
+			}
+		}
+
+		bvs(Pint const &A, Pint const &B) {
+			A_inward.X = A.Y;
+			A_inward.Y = -A.X;
+
+			B_inward.X = -A.Y;
+			B_inward.Y = A.X;
+
+			bounds_relation = A_inward.Dot(B);
+		}
+	};
+
+//#define debug_chords
 
 	void chord_clean(Region<Pint> * target, rto const & thresh, FLL<Region<Pint> *> & ins, FLL<Region<Pint> *> & outs) {
 		//if no pair is small enough to split, add to ins and return
@@ -293,23 +190,27 @@ namespace chord_splits
 #ifdef debug_chords
 		UE_LOG(LogTemp, Warning, TEXT("cleaning..."));
 #endif
+
+
+		rto min_offset, max_offset;
+
 		for (auto edge : relevants) {
-			Pint A_start = edge->getEnd()->getPosition();
-			Pint A_before = edge->getStart()->getPosition();
-			Pint A_after = edge->getNext()->getEnd()->getPosition();
 
-			Pint A = A_start - A_before;
+			Pint const A_start = edge->getEnd()->getPosition();
+			Pint const A_before = edge->getStart()->getPosition();
+			Pint const A_after = edge->getNext()->getEnd()->getPosition();
 
-			Pint A_left = A_before - A_start;
-			Pint A_right = A_after - A_start;
+			Pint const A = A_start - A_before;
 
-			rto min_offset = linear_offset(A, A_start);
-			rto max_offset = linear_offset(A, A_start);
+			bvs const A_angle(A_after - A_start, A_before - A_start);
+
+			min_offset = linear_offset(A, A_start);
+			max_offset = min_offset;
 
 			for (auto compare : relevants) {
-				Pint B_start = compare->getStart()->getPosition();
+				Pint const B_start = compare->getStart()->getPosition();
 
-				rto raw = linear_offset(A, B_start);
+				rto const raw = linear_offset(A, B_start);
 
 				if (min_offset > raw)
 					min_offset = raw;
@@ -323,15 +224,15 @@ namespace chord_splits
 
 				//get smallest points
 				
-				Pint B_end = compare->getEnd()->getPosition();
+				Pint const B_end = compare->getEnd()->getPosition();
 
-				Pint B_segment = B_end - B_start;
-				Pint B_perp(-B_segment.Y, B_segment.X);
+				Pint const B_segment = B_end - B_start;
+				Pint const B_perp(-B_segment.Y, B_segment.X);
 
-				if (!betweenVectors(A_right, A_left, B_perp))
+				if (!A_angle.test(B_perp))
 					continue;
 
-				Pint offset = A_start - B_start;
+				Pint const offset = A_start - B_start;
 
 				if (B_perp.Dot(offset) >= 0)
 					continue;
@@ -340,7 +241,7 @@ namespace chord_splits
 
 				if (offset.Dot(B_end - B_start) <= 0) {
 					intersect = B_start;
-					Pint B_last = compare->getLast()->getStart()->getPosition();
+					Pint const B_last = compare->getLast()->getStart()->getPosition();
 
 					if (!betweenVectors(B_end - B_start, B_last - B_start, offset))
 						continue;
@@ -348,7 +249,7 @@ namespace chord_splits
 				else if ((A_start - B_end).Dot(B_start - B_end) <= 0){
 					intersect = B_end;
 
-					Pint B_next = compare->getNext()->getEnd()->getPosition();
+					Pint const B_next = compare->getNext()->getEnd()->getPosition();
 
 					if (!betweenVectors(B_start - B_end, B_next - B_end, A_start - B_end))
 						continue;
@@ -356,7 +257,9 @@ namespace chord_splits
 				else
 					Pint::getIntersect(B_start, B_end, A_start, A_start + B_perp, intersect);
 
-				rto distance = (intersect - A_start).SizeSquared();
+				Pint const segment = intersect - A_start;
+
+				rto const distance = segment.SizeSquared();
 
 				if(distance < thresh)
 					if (!found_option || distance < result.distance) {						
@@ -376,9 +279,8 @@ namespace chord_splits
 					}
 			}
 
-			rto t = max_offset - min_offset;
-
-			rto offset = t * t * (A.X * A.X + A.Y * A.Y);
+			rto const t = max_offset - min_offset;
+			rto const offset = t * t * (A.X * A.X + A.Y * A.Y);
 #ifdef debug_chords
 			UE_LOG(LogTemp, Warning, TEXT("offset: %f"), offset.toFloat());
 #endif
@@ -568,6 +470,72 @@ namespace tri_utils
 //======================================== creation ========================================================
 //==========================================================================================================
 
+void Aroom_description_builder::CreateWall(Pint const & wall_left, Pint const & wall_right, float bottom, float top) {
+
+	UProceduralMeshComponent* Wall_Mesh = NewObject<UProceduralMeshComponent>();
+	Wall_Mesh->AttachToComponent(root, FAttachmentTransformRules::KeepRelativeTransform);
+	Wall_Mesh->ContainsPhysicsTriMeshData(true);
+	Wall_Mesh->bUseAsyncCooking = true;
+
+	TArray<FVector> Vertices;
+	TArray<int32> Triangles;
+	TArray<FVector> Normals;
+	TArray<FVector2D> UV0;
+	TArray<FProcMeshTangent> Tangents;
+	TArray<FLinearColor> VertexColors;
+
+	FVector2D dir = convert(wall_left - wall_right);
+
+	dir.Normalize();
+	dir *= 30;//door radial width
+
+	Vertices.Push(FVector(convert(wall_left), bottom));
+	Vertices.Push(FVector(convert(wall_left), top));
+	Vertices.Push(FVector(convert(wall_right), bottom));
+	Vertices.Push(FVector(convert(wall_right), top));
+
+	Triangles.Push(3);
+	Triangles.Push(1);
+	Triangles.Push(2);
+	Triangles.Push(2);
+	Triangles.Push(1);
+	Triangles.Push(0);
+
+	FVector2D normal(dir.Y, -dir.X);
+	Normals.Push(FVector(normal, 0));
+	Normals.Push(FVector(normal, 0));
+	Normals.Push(FVector(normal, 0));
+	Normals.Push(FVector(normal, 0));
+	Normals.Push(FVector(normal, 0));
+	Normals.Push(FVector(normal, 0));
+	Normals.Push(FVector(normal, 0));
+	Normals.Push(FVector(normal, 0));
+
+	UV0.Push(FVector2D(0, bottom));
+	UV0.Push(FVector2D(0, top));
+	UV0.Push(FVector2D(1, bottom));
+	UV0.Push(FVector2D(1, top));
+
+	Tangents.Push(FProcMeshTangent(0, 0, 1));
+	Tangents.Push(FProcMeshTangent(0, 0, 1));
+	Tangents.Push(FProcMeshTangent(0, 0, 1));
+	Tangents.Push(FProcMeshTangent(0, 0, 1));
+
+	auto color = FLinearColor();
+	color.MakeRandomColor();
+	color.A = 1.0;
+	VertexColors.Push(color);
+	VertexColors.Push(color);
+	VertexColors.Push(color);
+	VertexColors.Push(color);
+
+	Wall_Mesh->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, UV0, VertexColors, Tangents, true);
+	Wall_Mesh->ContainsPhysicsTriMeshData(true);
+
+	Wall_Mesh->Activate();
+
+	Wall_Mesh->RegisterComponentWithWorld(GetWorld());
+}
 void Aroom_description_builder::CreateDoor(Pint const & wall_left, Pint const & wall_right, float bottom, float top) {
 	UProceduralMeshComponent* Wall_Mesh = NewObject<UProceduralMeshComponent>();
 	Wall_Mesh->AttachToComponent(root, FAttachmentTransformRules::KeepRelativeTransform);
@@ -583,6 +551,7 @@ void Aroom_description_builder::CreateDoor(Pint const & wall_left, Pint const & 
 
 	FVector2D Mid = convert((wall_left + wall_right) / 2);
 	FVector2D dir = convert(wall_left - wall_right);
+
 	dir.Normalize();
 	dir *= 30;//door radial width
 	FVector2D doorframe_left = Mid + dir;
@@ -687,6 +656,7 @@ void Aroom_description_builder::CreateDoor(Pint const & wall_left, Pint const & 
 }
 void Aroom_description_builder::Create_Floor_Ceiling_New(Region<Pint> * source, float bottom, float top) {
 	auto Border = toFVector(source->getBounds().last()->getLoopPoints());
+	Border = tri_utils::Reverse(Border);
 
 	TArray<int32> Index_Faked;
 	Index_Faked.SetNum(Border.Num());
@@ -734,18 +704,19 @@ void Aroom_description_builder::Create_Floor_Ceiling_New(Region<Pint> * source, 
 void Aroom_description_builder::Create_Wall_Sections_New(Region<Pint> * source, float bottom, float top) {
 
 	for(auto border : source->getBounds()) {
-		auto border_points = border->getLoopPoints();
+		auto border_points = border->getLoopEdges();
 
-		Draw_Border(toFVector(border_points), 50, GetWorld());
+		for (auto edge : border_points) {
 
+			Pint const A = edge->getStart()->getPosition();
+			Pint const B = edge->getEnd()->getPosition();
 
-		auto last = border_points.last();
-
-		for (auto next : border_points) {
-
-			CreateDoor(last, next, bottom, top);
-
-			last = next;
+			if ((B - A).SizeSquared() < 40) {
+				CreateWall(B, A, bottom, top);
+			}
+			else {
+				CreateDoor(B, A, bottom, top);
+			}
 		}
 	}
 }
@@ -768,8 +739,10 @@ struct Type_Tracker {
 		}
 		return false;
 	}
-	void display(const UWorld* world) {
+	void display(Aroom_description_builder &builder) {
 		int64 p = 0;
+
+		UWorld * world = builder.GetWorld();
 		for (auto small : Smalls) {
 			cleanRegion(small);
 			for(auto border : small->getBounds())
@@ -778,10 +751,10 @@ struct Type_Tracker {
 
 		for (auto room : Rooms) {
 			cleanRegion(room);
-			//Create_Floor_Ceiling_New(room, 0, 200);
-			//Create_Wall_Sections_New(room, 0, 200, h);
+			builder.Create_Floor_Ceiling_New(room, 0, 200);
+			builder.Create_Wall_Sections_New(room, 0, 200);
 			for (auto border : room->getBounds())
-				Draw_Border(toFVector(border->getLoopPoints()), 70, world, color_blue);
+				Draw_Border(toFVector(border->getLoopPoints()), 80, world, color_blue);
 		}
 
 		int i = 0;
@@ -1507,7 +1480,7 @@ void Aroom_description_builder::Main_Generation_Loop() {
 
 	create_Layout(system_types, room_count, 3, 2, GetWorld());
 
-	system_types.display(GetWorld());
+	system_types.display(*this);
 }
 
 //==========================================================================================================

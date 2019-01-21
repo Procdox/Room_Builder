@@ -84,4 +84,4 @@ struct PBox {
 	}
 };
 
-rto linear_offset(Pint &A, Pint &B);
+rto linear_offset(Pint const &A, Pint const &B);
