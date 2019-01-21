@@ -654,6 +654,7 @@ void Aroom_description_builder::CreateDoor(Pint const & wall_left, Pint const & 
 
 	Wall_Mesh->RegisterComponentWithWorld(GetWorld());
 }
+
 void Aroom_description_builder::Create_Floor_Ceiling_New(Region<Pint> * source, float bottom, float top) {
 	auto Border = toFVector(source->getBounds().last()->getLoopPoints());
 	Border = tri_utils::Reverse(Border);
@@ -849,60 +850,6 @@ void cleanNulls(Type_Tracker &target) {
 		cleanRegion(region);
 }
 
-/*void mergeSmalls(Type_Tracker &target) {
-	UE_LOG(LogTemp, Warning, TEXT("Merge Smalls\n"));
-	//for each small
-	//for connected room
-	//union the borders, reduce, and intersect with small
-	//choose room with greatest area 
-	for (auto small : target.Smalls) {
-		auto local_boundary = toPaths(small);
-		
-		FLL<Region<Pint> *> neighbors = small->getNeighbors();
-
-		Region<Pint> * best_neighbor = nullptr;
-		float best_area_score = 0;
-		ClipperLib::PolyTree best_tree;
-
-		for (auto neighbor : neighbors) {
-			if (!target.isRoom(neighbor)) {
-				continue;
-			}
-
-			//chord_splits::chord_clean(neighbor, room_min_width, hall_ins, hall_outs);
-			//auto other_boundary = toPaths(neighbor);
-
-			//auto grouping = addPaths(other_boundary, local_boundary);
-			//auto result = sizeRestrictPaths(grouping, room_min_width / 2);
-
-			//if (result.size() > 0) {
-			//	float area_score = ClipperLib::Area(result[0]);
-			//	if (area_score > best_area_score) {
-			//		best_area_score = area_score;
-			//		best_neighbor = neighbor;
-			//		makeTree(result, best_tree);
-			//	}
-			//}
-		}
-
-		if (best_neighbor != nullptr) {
-			FLL<Region<Pint> *> ins;
-			FLL<Region<Pint> *> outs;
-
-			
-			//polytree_utils::AllocateTree(best_tree, small, ins, outs);
-
-			for (auto in : ins) {
-				merge(best_neighbor, in);
-			}
-
-			target.Smalls.remove(small);
-			target.Smalls.append(outs);
-		}
-	}
-}*/
-
-
 /*
 FLL<Pint> choosePointsNear(Region<Pint> const & target, int64 count, rto offset){
 	//pick n points AWAY from the polygon
@@ -1076,11 +1023,13 @@ void prototyper() {
 		//no segments?
 		//retreat
 	} while (true);
-}
+}*/
+
+
 //==========================================================================================================
 //======================================= generation =======================================================
 //==========================================================================================================
-*/
+
 
 FLL<Pint> Square_Generator(rto x, rto y, Pint center) {
 	FLL<Pint> boundary;
@@ -1469,8 +1418,8 @@ void Aroom_description_builder::Main_Generation_Loop() {
 	DCEL<Pint> system_new;
 	Type_Tracker system_types;
 
-	FMath::SRandInit(0);
-	FMath::RandInit(0);
+	//FMath::SRandInit(0);
+	//FMath::RandInit(0);
 
 	auto system_bounds = Square_Generator(100, 100, Pint(0,0));
 
