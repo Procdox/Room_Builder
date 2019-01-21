@@ -405,7 +405,7 @@ namespace chord_splits
 			//split
 			UE_LOG(LogTemp, Warning, TEXT("Orig"));
 			for (auto face : target->getBounds()) {
-				UE_LOG(LogTemp, Warning, TEXT("Face"));
+				UE_LOG(LogTemp, Warning, TEXT("Face >k-"));
 				for (auto point : face->getLoopPoints()) {
 					UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.toFloat(), point.Y.toFloat());
 				}
@@ -416,7 +416,7 @@ namespace chord_splits
 #ifdef debug_chords
 			UE_LOG(LogTemp, Warning, TEXT("Result target"));
 			for (auto face : target->getBounds()) {
-				UE_LOG(LogTemp, Warning, TEXT("Face"));
+				UE_LOG(LogTemp, Warning, TEXT("Face >r:"));
 				for (auto point : face->getLoopPoints()) {
 					UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.toFloat(), point.Y.toFloat());
 				}
@@ -424,7 +424,7 @@ namespace chord_splits
 			if (P != nullptr) {
 				UE_LOG(LogTemp, Warning, TEXT("Result P"));
 				for (auto face : P->getBounds()) {
-					UE_LOG(LogTemp, Warning, TEXT("Face"));
+					UE_LOG(LogTemp, Warning, TEXT("Face >b:"));
 					for (auto point : face->getLoopPoints()) {
 						UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.toFloat(), point.Y.toFloat());
 					}

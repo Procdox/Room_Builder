@@ -26,16 +26,21 @@ def PolygonArea(corners):
     area = area / 2.0
     return area
 
-def all(f, a):
+def all(f):
     faces = []
     face_file = open(f)
     p = []
+    a = []
     for x in face_file:
         if x.find('(') > -1:
             p.append(t(x))
-        elif len(p) > 0:
-            faces.append(p)
-            p = []
+        else:
+            o = x.find('>')
+            if o > -1:
+                a.append(x[o+1:o+3])
+            if len(p) > 0:
+                faces.append(p)
+                p = []
 
     if len(p) > 0:
         faces.append(p)
@@ -43,7 +48,7 @@ def all(f, a):
     for i in range(0,len(faces)):
         s(faces[i], a[i])
 
-all("orig.txt",['k-','r:','r:','b:','b:','b:'])
+all("orig.txt")
 
 #ax.axis('equal')
 ax.set_aspect('equal', 'box')
