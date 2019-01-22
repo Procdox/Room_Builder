@@ -173,7 +173,7 @@ namespace chord_splits
 		}
 	};
 
-//#define debug_chords
+#define debug_chords
 
 	void chord_clean(Region<Pint> * target, rto const & thresh, FLL<Region<Pint> *> & ins, FLL<Region<Pint> *> & outs) {
 		//if no pair is small enough to split, add to ins and return
@@ -184,8 +184,7 @@ namespace chord_splits
 		FLL<Edge<Pint> *> relevants;
 
 		for (auto border : target->getBounds()) {
-			auto r = border->getLoopEdges();
-			relevants.absorb(r);
+			border->getLoopEdges(relevants);
 		}
 #ifdef debug_chords
 		UE_LOG(LogTemp, Warning, TEXT("cleaning..."));
@@ -779,10 +778,12 @@ bool Cull_Suggested(Region<Pint> * target, FLL<Region<Pint> *> &results, FLL<Reg
 	FLL<Region<Pint> *> rooms;
 	FLL<Region<Pint>*> outers;
 
+	cleanRegion(target);
+
 	chord_splits::chord_clean(target, room_min_width, rooms, outers);
 
-	nulls.append(outers);
-	results.append(rooms);
+	nulls.absorb(outers);
+	results.absorb(rooms);
 
 	return true;
 }
@@ -803,12 +804,12 @@ void mergeGroup(FLL<Region<Pint> *> & nulls) {
 	}
 }
 
-void cleanNulls(Type_Tracker &target) {
+void cleanNulls(Type_Tracker &target, FLL<Region<Pint> *> &input_nulls) {
 	UE_LOG(LogTemp, Warning, TEXT("Clean Nulls\n"));
 
-	FLL<Region<Pint> *> input_nulls;
+	//FLL<Region<Pint> *> input_nulls;
 	FLL<Region<Pint> *> input_halls;
-	input_nulls.absorb(target.Nulls);
+	//input_nulls.absorb(target.Nulls);
 	mergeGroup(input_nulls);
 
 	for (auto focus : input_nulls) {
@@ -816,9 +817,16 @@ void cleanNulls(Type_Tracker &target) {
 		FLL<Region<Pint> *> room_ins;
 		FLL<Region<Pint> *> room_outs;
 
+		cleanRegion(focus);
+
 		chord_splits::chord_clean(focus, room_min_width, room_ins, room_outs);
 
+		for (auto null : room_ins) {
+			merge(null, null);
+		}
+
 		target.Nulls.absorb(room_ins);
+
 		input_halls.absorb(room_outs);
 	}
 
@@ -827,13 +835,14 @@ void cleanNulls(Type_Tracker &target) {
 		FLL<Region<Pint> *> hall_ins;
 		FLL<Region<Pint> *> hall_outs;
 
+		cleanRegion(focus);
+
 		chord_splits::chord_clean(focus, hall_min_width, hall_ins, hall_outs);
 
 		target.Halls.absorb(hall_ins);
 		target.Smalls.absorb(hall_outs);
 	}
 
-	mergeGroup(target.Nulls);
 	mergeGroup(target.Halls);
 	mergeGroup(target.Smalls);
 
@@ -1176,9 +1185,9 @@ bool createRoomAtPoint(Type_Tracker &system_types, Pint const &point, int64 scal
 		Cull_Suggested(face, created_rooms, created_nulls);
 	}
 
-	system_types.Nulls.absorb(created_nulls);
+	//system_types.Nulls.absorb(created_nulls);
 
-	cleanNulls(system_types);
+	cleanNulls(system_types, created_nulls);
 
 	if (created != nullptr) {
 		created->append(created_rooms);
@@ -1414,12 +1423,13 @@ void create_Layout(Type_Tracker &system_types, int64 large, int64 medium, int64 
 }
 
 void Aroom_description_builder::Main_Generation_Loop() {
-	UE_LOG(LogTemp, Warning, TEXT("Main Generation\n"));
+	UE_LOG(LogTemp, Warning, TEXT("Main Generation"));
 	DCEL<Pint> system_new;
 	Type_Tracker system_types;
 
-	//FMath::SRandInit(0);
-	//FMath::RandInit(0);
+	int seed = 45732;// FMath::RandRange(0, 100000);
+	FMath::RandInit(seed);
+	UE_LOG(LogTemp, Warning, TEXT("SRand Seed %d\n"), seed);
 
 	auto system_bounds = Square_Generator(100, 100, Pint(0,0));
 

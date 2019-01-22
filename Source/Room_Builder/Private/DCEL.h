@@ -574,6 +574,7 @@ public:
 		return target;
 	}
 
+	//returns a list of the edges in the loop
 	FLL<Edge<_P> const *> getLoopEdges() const {
 		Edge<_P> * focus = root;
 		FLL<Edge<_P> *> target;
@@ -587,6 +588,27 @@ public:
 		return target;
 	}
 
+	//write to a list, the edges in the loop
+	void getLoopEdges(FLL<Edge<_P> *> &target) {
+		Edge<_P> * focus = root;
+		do {
+			target.append(focus);
+
+			focus = focus->next;
+		} while (focus != root);
+	}
+
+	//write to a list, the edges in the loop
+	void getLoopEdges(FLL<Edge<_P> const *> &target) const {
+		Edge<_P> * focus = root;
+		do {
+			target.append(focus);
+
+			focus = focus->next;
+		} while (focus != root);
+	}
+
+	//return a list of the faces that share a boundary in the loop
 	FLL<Face<_P> *> getNeighbors() {
 		FLL<Face<_P> *> target;
 		Edge<_P> * focus = root;
@@ -618,6 +640,19 @@ public:
 		return target;
 	}
 
+	bool neighbors(Face<_P> const * target) const {
+		Edge<_P> const * focus = root;
+
+		do {
+			if (focus->inv->loop == target) {
+				return true;
+			}
+
+			focus = focus->next;
+		} while (focus != root);
+
+		return false;
+	}
 	/*struct interact_point {
 		interaction_state state;
 		int region;

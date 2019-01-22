@@ -1,17 +1,23 @@
 #include "Ratio_Region.h"
 #include <cmath>
 
+#define debug_suballocate
+#define debug_merge
+//#define debug_clean
+
+#if defined(debug_suballocate) || defined(debug_merge) || defined(debug_clean)
+#define using_unreal
+#endif
+
 #ifdef using_unreal
 #include "CoreMinimal.h"
 #endif
 
 
 FaceRelation const getPointRelation(Face<Pint> & rel, Pint const &test_point) {
-	Edge<Pint> * focus = rel.getRoot();
-	int64 count = 0;
 
-	bool is_best = false;
-	rto best_distance = 0;
+	Edge<Pint> * focus = rel.getRoot();
+
 	bool inside = Pint::area(rel.getLoopPoints()) < 0;
 
 	do {
@@ -44,11 +50,18 @@ FaceRelation const getPointRelation(Face<Pint> & rel, Pint const &test_point) {
 				if (distance == 0) {
 					return FaceRelation(FaceRelationType::point_on_boundary, focus);
 				}
-				else if (distance > 0 && (distance < best_distance || !is_best)) {
-					is_best = true;
-					best_distance = distance;
-
-					inside = y_length > 0;
+				else if (distance > 0) {
+					if (ratio == 1) {
+						if(y_offset > 0)
+							inside = !inside;
+					}
+					else if (ratio == 0) {
+						if(y_length < 0)
+							inside = !inside;
+					}
+					else {
+						inside = !inside;
+					}
 				}
 			}
 		}
@@ -64,10 +77,7 @@ FaceRelation const getPointRelation(Face<Pint> & rel, Pint const &test_point) {
 }
 
 FaceRelationType const getPointRelation(FLL<Pint> const & rel, Pint const &test_point) {
-	int64 count = 0;
 
-	bool is_best = false;
-	rto best_distance = 0;
 	bool inside = Pint::area(rel) < 0;
 
 	for (auto start = rel.begin(); start != rel.end(); ++start) {
@@ -99,11 +109,18 @@ FaceRelationType const getPointRelation(FLL<Pint> const & rel, Pint const &test_
 				if (distance == 0) {
 					return FaceRelationType::point_on_boundary;
 				}
-				else if (distance > 0 && (distance < best_distance || !is_best)) {
-					is_best = true;
-					best_distance = distance;
-
-					inside = y_length > 0;
+				else if (distance > 0) {
+					if (ratio == 1) {
+						if (y_offset > 0)
+							inside = !inside;
+					}
+					else if (ratio == 0) {
+						if (y_length < 0)
+							inside = !inside;
+					}
+					else {
+						inside = !inside;
+					}
 				}
 			}
 		}
@@ -135,43 +152,120 @@ bool merge(Region<Pint> * a, Region<Pint> * b) {
 	//regions are either strictly internal, strictly external, or weakly external to boundaries
 
 	//if a boundary contains any part of a region, it can't touch that region (
+
 	
-	Face<Pint> * local_face = nullptr;
-	Face<Pint> * target_face = nullptr;
-	for(auto focus_local : a->getBounds()) {
+	if (a != b) {
 
-		auto neighbors = focus_local->getNeighbors();
 
-		for (auto focus_target : b->getBounds()) {
+		Face<Pint> * local_face = nullptr;
+		Face<Pint> * target_face = nullptr;
+		for (auto focus_local : a->getBounds()) {
 
-			if (neighbors.contains(focus_target)) {
-				local_face = focus_local;
-				target_face = focus_target;
+			auto neighbors = focus_local->getNeighbors();
+
+			for (auto focus_target : b->getBounds()) {
+
+				if (neighbors.contains(focus_target)) {
+					local_face = focus_local;
+					target_face = focus_target;
+					break;
+				}
+			}
+
+			if (local_face != nullptr) {
 				break;
 			}
 		}
 
-		if (local_face != nullptr) {
-			break;
+		if (local_face == nullptr) return false;
+
+#ifdef debug_merge
+		UE_LOG(LogTemp, Warning, TEXT("merging"));
+		UE_LOG(LogTemp, Warning, TEXT("a"));
+		for (auto bound : a->getBounds()) {
+			UE_LOG(LogTemp, Warning, TEXT("face >k-"));
+			for (auto point : bound->getLoopPoints()) {
+				UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.toFloat(), point.Y.toFloat());
+			}
 		}
+		UE_LOG(LogTemp, Warning, TEXT("b"));
+		for (auto bound : b->getBounds()) {
+			UE_LOG(LogTemp, Warning, TEXT("face >b-"));
+			for (auto point : bound->getLoopPoints()) {
+				UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.toFloat(), point.Y.toFloat());
+			}
+		}
+#endif
+
+		//we have found a boundary pair that neighbors one another, merge them
+
+		a->remove(local_face);
+		b->remove(target_face);
+
+		auto tba = local_face->mergeWithFace(target_face);
+
+		auto t(b->getBounds());
+		for (auto face : t)
+			a->append(face);
+
+		for (auto face : tba)
+			a->append(face);
+
+#ifdef debug_merge
+		UE_LOG(LogTemp, Warning, TEXT("result"));
+		for (auto bound : a->getBounds()) {
+			UE_LOG(LogTemp, Warning, TEXT("face >r:"));
+			for (auto point : bound->getLoopPoints()) {
+				UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.toFloat(), point.Y.toFloat());
+			}
+		}
+#endif
+
+		return true;
 	}
+	else {
+#ifdef debug_merge
+		UE_LOG(LogTemp, Warning, TEXT("merging"));
+		for (auto bound : a->getBounds()) {
+			UE_LOG(LogTemp, Warning, TEXT("face >k:"));
+			for (auto point : bound->getLoopPoints()) {
+				UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.toFloat(), point.Y.toFloat());
+			}
+		}
+#endif
 
-	if (local_face == nullptr) return false;
+		auto bounds = a->getBounds();
+		for (auto focus_local = bounds.begin(); focus_local != bounds.end();) {
 
-	//we have found a boundary pair that neighbors one another, merge them
+			for (auto focus_compare = focus_local; focus_compare != bounds.end();) {
 
-	a->remove(local_face);
-	b->remove(target_face);
+				if (focus_local->neighbors(*focus_compare)) {
+					auto tba = focus_local->mergeWithFace(*focus_compare);
 
-	auto tba = local_face->mergeWithFace(target_face);
+					for (auto face : tba)
+						if (face != *focus_local)
+							a->append(face);
 
-	for (auto face : b->getBounds())
-		a->append(face);
+					focus_compare = focus_local;
+				}
 
-	for(auto face : tba)
-		a->append(face);
+				++focus_compare;
+			}
+			++focus_local;
+		}
+#ifdef debug_merge
+		UE_LOG(LogTemp, Warning, TEXT("result"));
+		for (auto bound : a->getBounds()) {
+			UE_LOG(LogTemp, Warning, TEXT("face >r:"));
+			for (auto point : bound->getLoopPoints()) {
+				UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.toFloat(), point.Y.toFloat());
+			}
+		}
+#endif
 
-	return true;
+		return false;
+	}
+	
 }
 
 struct intersect {
@@ -467,6 +561,17 @@ void determineInteriors(Region<Pint> * target, FLL<interact *> & details,
 
 						exteriors.push(created->getInv()->getFace());
 					}
+					else if (next == details.begin()) {
+						auto relevant = into->mark->getNext()->getInv();
+						exteriors.remove(relevant->getFace());
+
+						auto created = target->getUni()->addEdge(from->mark, relevant);
+
+						if (!interiors.contains(created->getFace()))
+							interiors.push(created->getFace());
+
+						exteriors.push(created->getInv()->getFace());
+					}
 					else {
 						exteriors.remove(into->mark->getFace());
 
@@ -498,15 +603,15 @@ void determineInteriors(Region<Pint> * target, FLL<interact *> & details,
 void subAllocate(Region<Pint> * target, FLL<Pint> const & boundary,
 	FLL<Region<Pint> *> & exteriors, FLL<Region<Pint> *> & interiors) {
 
-#ifdef using_unreal
+#ifdef debug_suballocate
 	UE_LOG(LogTemp, Warning, TEXT("SA"));
-	UE_LOG(LogTemp, Warning, TEXT("Boundary"));
+	UE_LOG(LogTemp, Warning, TEXT("Boundary >g:"));
 	for (auto point : boundary) {
 		UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"),point.X.toFloat(),point.Y.toFloat());
 	}
 
 	for (auto face : target->getBounds()) {
-		UE_LOG(LogTemp, Warning, TEXT("Face"));
+		UE_LOG(LogTemp, Warning, TEXT("Face >k-"));
 		for (auto point : face->getLoopPoints()) {
 			UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.toFloat(), point.Y.toFloat());
 		}
@@ -526,7 +631,7 @@ void subAllocate(Region<Pint> * target, FLL<Pint> const & boundary,
 	FLL<Face<Pint> *> exterior_faces;
 	FLL<Face<Pint> *> interior_faces;
 
-#ifdef using_unreal
+#ifdef debug_suballocate
 	for (auto detail : details) {
 		if (detail->type == FaceRelationType::point_exterior) {
 			UE_LOG(LogTemp, Warning, TEXT("(%f,%f) : exterior"), detail->location.X.toFloat(), detail->location.Y.toFloat());
@@ -628,9 +733,20 @@ void subAllocate(Region<Pint> * target, FLL<Pint> const & boundary,
 }
 
 void cleanRegion(Region<Pint> * target) {
+
+#ifdef debug_clean
+	UE_LOG(LogTemp, Warning, TEXT("Clean Region"));
+#endif
 	for (auto border : target->getBounds()) {
 		auto og_root = border->getRoot();
 		auto focus = og_root;
+
+#ifdef debug_clean
+		UE_LOG(LogTemp, Warning, TEXT("Face >k:"));
+		for (auto point : border->getLoopPoints()) {
+			UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.toFloat(), point.Y.toFloat());
+		}
+#endif
 
 		while(true) {
 			auto next = focus->getNext();
@@ -641,8 +757,13 @@ void cleanRegion(Region<Pint> * target) {
 				bool parallel = false;
 
 				// parallel test
-				Pint a = focus->getEnd()->getPosition() - focus->getStart()->getPosition();
-				Pint b = next->getEnd()->getPosition() - next->getStart()->getPosition();
+
+				Pint const start = focus->getStart()->getPosition();
+				Pint const mid = focus->getEnd()->getPosition();
+				Pint const end = next->getEnd()->getPosition();
+
+				Pint const a = mid - start;
+				Pint const b = end - mid;
 
 				if (a.Y != 0 && b.Y != 0) {
 					rto x = a.X / a.Y;
@@ -654,6 +775,14 @@ void cleanRegion(Region<Pint> * target) {
 				}
 
 				if (parallel) {
+#ifdef debug_clean
+					UE_LOG(LogTemp, Warning, TEXT("contract >r:"));
+					UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), start.X.toFloat(), start.Y.toFloat());
+					UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), mid.X.toFloat(), mid.Y.toFloat());
+					UE_LOG(LogTemp, Warning, TEXT("contract >g:"));
+					UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), mid.X.toFloat(), mid.Y.toFloat());
+					UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), end.X.toFloat(), end.Y.toFloat());
+#endif
 					next->getInv()->contract();
 				}
 			}
