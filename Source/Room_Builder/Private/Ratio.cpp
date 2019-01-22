@@ -9,42 +9,49 @@ int64 gcd(int64 a, int64 b) {
 
 rto::rto()
 {
+	o = 0;
 	n = 0;
 	d = 1;
 }
 
 rto::rto(int64 num)
 {
-	n = num;
+	o = num;
+	n = 0;
 	d = 1;
 }
 
-rto::rto(int64 num, int64 den)
+rto::rto(int64 offset, int64 num, int64 den)
 {
+	o = offset;
 	n = num;
 	d = den;
 }
 
 rto::rto(rto && target)
 {
+	o = target.o;
 	n = target.n;
 	d = target.d;
 }
 
 rto::rto(rto const & target) {
+	o = target.o;
 	n = target.n;
 	d = target.d;
 }
 
 rto & rto::operator=(int64 const & target)
 {
-	n = target;
+	o = target;
+	n = 0;
 	d = 1;
 	return *this;
 }
 
 rto & rto::operator=(rto const & target)
 {
+	o = target.o;
 	n = target.n;
 	d = target.d;
 
@@ -53,21 +60,12 @@ rto & rto::operator=(rto const & target)
 
 rto rto::operator-() const
 {
-	return rto(-n,d);
+	return rto(-o,-n,d);
 }
 
 rto rto::operator+(int64 factor) const
 {
-	int64 x = n + factor * d;
-	int64 y = d;
-
-	int64 z = gcd(x, y);
-
-	if (y / z < 0) {
-		z *= -1;
-	}
-
-	return rto(x / z, y / z);
+	return rto(o + factor, n, d);
 }
 
 rto rto::operator+(const rto & target) const
@@ -82,22 +80,18 @@ rto rto::operator+(const rto & target) const
 	if (y / z < 0) {
 		z *= -1;
 	}
+	x /= z;
+	y /= z;
 
-	return rto(x / z, y / z);
+	int64 k = x / y;
+	x -= y * k;
+
+	return rto(o + target.o + k, x, y);
 }
 
 rto rto::operator-(int64 factor) const
 {
-	int64 x = n - factor * d;
-	int64 y = d;
-
-	int64 z = gcd(x, y);
-
-	if (y / z < 0) {
-		z *= -1;
-	}
-
-	return rto(x / z, y / z);
+	return rto(o - factor, n, d);
 }
 
 rto rto::operator-(const rto & target) const
@@ -112,8 +106,13 @@ rto rto::operator-(const rto & target) const
 	if (y / z < 0) {
 		z *= -1;
 	}
+	x /= z;
+	y /= z;
 
-	return rto(x / z, y / z);
+	int64 k = x / y;
+	x -= y * k;
+
+	return rto(o - target.o + k, x, y);
 }
 
 rto rto::operator*(int64 factor) const
@@ -126,8 +125,13 @@ rto rto::operator*(int64 factor) const
 	if (y / z < 0) {
 		z *= -1;
 	}
+	x /= z;
+	y /= z;
 
-	return rto(x / z, y / z);
+	int64 k = x / y;
+	x -= y * k;
+
+	return rto(o * factor + k, x, y);
 }
 
 rto rto::operator*(const rto & target) const

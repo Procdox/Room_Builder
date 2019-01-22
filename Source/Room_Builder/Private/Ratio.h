@@ -6,10 +6,11 @@ class rto {
 	int64 d;
 
 	//to prevent division by 0, we forbid direct access to the denominator
-	rto(int64 num, int64 den);
+	rto(int64 offset, int64 num, int64 den);
 
 public:
 	int64 n;
+	int64 o;
 
 	rto();
 	rto(int64 num);
