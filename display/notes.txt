@@ -10,3 +10,6 @@ broken seeds:
     result of previous fix
     null face has its own region, despite belonging to the existing region
     seems to be caused by an errorneous cut across an exterior region, causing the two portions of the newer null face to become divided
+    SOLVED, parameters to betweenAngles was swapped for end bound cuts
+- 3 larges / 45 mediums
+    infinite recursion upon cutting a strand of a room directly along an edge

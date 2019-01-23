@@ -250,7 +250,7 @@ namespace chord_splits
 
 					Pint const B_next = compare->getNext()->getEnd()->getPosition();
 
-					if (!betweenVectors(B_start - B_end, B_next - B_end, A_start - B_end))
+					if (!betweenVectors(B_next - B_end, B_start - B_end, A_start - B_end))
 						continue;
 				}
 				else
