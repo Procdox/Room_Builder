@@ -166,8 +166,8 @@ namespace chord_splits
 			A_inward.X = A.Y;
 			A_inward.Y = -A.X;
 
-			B_inward.X = -A.Y;
-			B_inward.Y = A.X;
+			B_inward.X = -B.Y;
+			B_inward.Y = B.X;
 
 			bounds_relation = A_inward.Dot(B);
 		}
@@ -217,7 +217,7 @@ namespace chord_splits
 				if (max_offset < raw)
 					max_offset = raw;
 
-				if (compare == edge || compare == edge->getNext() || compare == edge->getLast()) {
+				if (compare == edge || compare == edge->getNext()) {
 					continue;
 				}
 
@@ -465,261 +465,7 @@ namespace tri_utils
 
 }
 
-//==========================================================================================================
-//======================================== creation ========================================================
-//==========================================================================================================
 
-void Aroom_description_builder::CreateWall(Pint const & wall_left, Pint const & wall_right, float bottom, float top) {
-
-	UProceduralMeshComponent* Wall_Mesh = NewObject<UProceduralMeshComponent>();
-	Wall_Mesh->AttachToComponent(root, FAttachmentTransformRules::KeepRelativeTransform);
-	Wall_Mesh->ContainsPhysicsTriMeshData(true);
-	Wall_Mesh->bUseAsyncCooking = true;
-
-	TArray<FVector> Vertices;
-	TArray<int32> Triangles;
-	TArray<FVector> Normals;
-	TArray<FVector2D> UV0;
-	TArray<FProcMeshTangent> Tangents;
-	TArray<FLinearColor> VertexColors;
-
-	FVector2D dir = convert(wall_left - wall_right);
-
-	dir.Normalize();
-	dir *= 30;//door radial width
-
-	Vertices.Push(FVector(convert(wall_left), bottom));
-	Vertices.Push(FVector(convert(wall_left), top));
-	Vertices.Push(FVector(convert(wall_right), bottom));
-	Vertices.Push(FVector(convert(wall_right), top));
-
-	Triangles.Push(3);
-	Triangles.Push(1);
-	Triangles.Push(2);
-	Triangles.Push(2);
-	Triangles.Push(1);
-	Triangles.Push(0);
-
-	FVector2D normal(dir.Y, -dir.X);
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
-
-	UV0.Push(FVector2D(0, bottom));
-	UV0.Push(FVector2D(0, top));
-	UV0.Push(FVector2D(1, bottom));
-	UV0.Push(FVector2D(1, top));
-
-	Tangents.Push(FProcMeshTangent(0, 0, 1));
-	Tangents.Push(FProcMeshTangent(0, 0, 1));
-	Tangents.Push(FProcMeshTangent(0, 0, 1));
-	Tangents.Push(FProcMeshTangent(0, 0, 1));
-
-	auto color = FLinearColor();
-	color.MakeRandomColor();
-	color.A = 1.0;
-	VertexColors.Push(color);
-	VertexColors.Push(color);
-	VertexColors.Push(color);
-	VertexColors.Push(color);
-
-	Wall_Mesh->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, UV0, VertexColors, Tangents, true);
-	Wall_Mesh->ContainsPhysicsTriMeshData(true);
-
-	Wall_Mesh->Activate();
-
-	Wall_Mesh->RegisterComponentWithWorld(GetWorld());
-}
-void Aroom_description_builder::CreateDoor(Pint const & wall_left, Pint const & wall_right, float bottom, float top) {
-	UProceduralMeshComponent* Wall_Mesh = NewObject<UProceduralMeshComponent>();
-	Wall_Mesh->AttachToComponent(root, FAttachmentTransformRules::KeepRelativeTransform);
-	Wall_Mesh->ContainsPhysicsTriMeshData(true);
-	Wall_Mesh->bUseAsyncCooking = true;
-
-	TArray<FVector> Vertices;
-	TArray<int32> Triangles;
-	TArray<FVector> Normals;
-	TArray<FVector2D> UV0;
-	TArray<FProcMeshTangent> Tangents;
-	TArray<FLinearColor> VertexColors;
-
-	FVector2D Mid = convert((wall_left + wall_right) / 2);
-	FVector2D dir = convert(wall_left - wall_right);
-
-	dir.Normalize();
-	dir *= 30;//door radial width
-	FVector2D doorframe_left = Mid + dir;
-	FVector2D doorframe_right = Mid - dir;
-
-	Vertices.Push(FVector(convert(wall_left), bottom));
-	Vertices.Push(FVector(convert(wall_left), top));
-	Vertices.Push(FVector(doorframe_left, bottom));
-	Vertices.Push(FVector(doorframe_left, top));
-	Vertices.Push(FVector(doorframe_right, bottom));
-	Vertices.Push(FVector(doorframe_right, top));
-	Vertices.Push(FVector(convert(wall_right), bottom));
-	Vertices.Push(FVector(convert(wall_right), top));
-
-	Triangles.Push(7);
-	Triangles.Push(5);
-	Triangles.Push(6);
-	Triangles.Push(6);
-	Triangles.Push(5);
-	Triangles.Push(4);
-
-	Triangles.Push(3);
-	Triangles.Push(1);
-	Triangles.Push(2);
-	Triangles.Push(2);
-	Triangles.Push(1);
-	Triangles.Push(0);
-
-	FVector2D normal(dir.Y, -dir.X);
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
-
-	UV0.Push(FVector2D(0, bottom));
-	UV0.Push(FVector2D(0, top));
-	UV0.Push(FVector2D(1, bottom));
-	UV0.Push(FVector2D(1, top));
-	UV0.Push(FVector2D(0, bottom));
-	UV0.Push(FVector2D(0, top));
-	UV0.Push(FVector2D(1, bottom));
-	UV0.Push(FVector2D(1, top));
-
-	Tangents.Push(FProcMeshTangent(0, 0, 1));
-	Tangents.Push(FProcMeshTangent(0, 0, 1));
-	Tangents.Push(FProcMeshTangent(0, 0, 1));
-	Tangents.Push(FProcMeshTangent(0, 0, 1));
-	Tangents.Push(FProcMeshTangent(0, 0, 1));
-	Tangents.Push(FProcMeshTangent(0, 0, 1));
-	Tangents.Push(FProcMeshTangent(0, 0, 1));
-	Tangents.Push(FProcMeshTangent(0, 0, 1));
-
-	auto color = FLinearColor();
-	color.MakeRandomColor();
-	color.A = 1.0;
-	VertexColors.Push(color);
-	VertexColors.Push(color);
-	VertexColors.Push(color);
-	VertexColors.Push(color);
-	VertexColors.Push(color);
-	VertexColors.Push(color);
-	VertexColors.Push(color);
-	VertexColors.Push(color);
-
-
-	const float door_height = 110;
-	if (top - bottom >= door_height) {
-		Vertices.Push(FVector(doorframe_left, bottom + door_height));
-		Vertices.Push(FVector(doorframe_right, bottom + door_height));
-
-		Triangles.Push(5);
-		Triangles.Push(3);
-		Triangles.Push(9);
-		Triangles.Push(9);
-		Triangles.Push(3);
-		Triangles.Push(8);
-
-		Normals.Push(FVector(normal, 0));
-		Normals.Push(FVector(normal, 0));
-
-		float uv_ratio = door_height / (top - bottom);
-		UV0.Push(FVector2D(0, uv_ratio));
-		UV0.Push(FVector2D(1, uv_ratio));
-
-		Tangents.Push(FProcMeshTangent(0, 0, 1));
-		Tangents.Push(FProcMeshTangent(0, 0, 1));
-
-		VertexColors.Push(color);
-		VertexColors.Push(color);
-	}
-
-	Wall_Mesh->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, UV0, VertexColors, Tangents, true);
-	Wall_Mesh->ContainsPhysicsTriMeshData(true);
-
-	Wall_Mesh->Activate();
-
-	Wall_Mesh->RegisterComponentWithWorld(GetWorld());
-}
-
-void Aroom_description_builder::Create_Floor_Ceiling_New(Region<Pint> * source, float bottom, float top) {
-	auto Border = toFVector(source->getBounds().last()->getLoopPoints());
-	Border = tri_utils::Reverse(Border);
-
-	TArray<int32> Index_Faked;
-	Index_Faked.SetNum(Border.Num());
-	for (int32 ii = 0; ii < Border.Num(); ii++) {
-		Index_Faked[ii] = ii;
-	}
-	TArray<int32> Triangles_top = tri_utils::Triangulate(Border, Index_Faked);
-	TArray<int32> Triangles_bottom = tri_utils::Reverse(Triangles_top);
-
-	UProceduralMeshComponent* Floor_Mesh = NewObject<UProceduralMeshComponent>();
-	Floor_Mesh->AttachToComponent(root, FAttachmentTransformRules::KeepRelativeTransform);
-	Floor_Mesh->ContainsPhysicsTriMeshData(true);
-	Floor_Mesh->bUseAsyncCooking = true;
-
-	TArray<FVector> vertices_bottom;
-	TArray<FVector> vertices_top;
-	TArray<FVector> normals_bottom;
-	TArray<FVector> normals_top;
-	TArray<FVector2D> UV0_bottom;
-	TArray<FVector2D> UV0_top;
-	TArray<FProcMeshTangent> tangents_bottom;
-	TArray<FProcMeshTangent> tangents_top;
-	TArray<FLinearColor> vertexColors_bottom;
-	TArray<FLinearColor> vertexColors_top;
-
-	for (auto& vector : Border) {
-		vertices_bottom.Add(FVector(vector.X, vector.Y, bottom));
-		vertices_top.Add(FVector(vector.X, vector.Y, top));
-		normals_bottom.Add(FVector(0, 0, 1));
-		normals_top.Add(FVector(0, 0, -1));
-		UV0_bottom.Add(vector / 10);
-		UV0_top.Add(vector / 10);
-		tangents_bottom.Add(FProcMeshTangent(0, 1, 0));
-		tangents_top.Add(FProcMeshTangent(0, 1, 0));
-		vertexColors_bottom.Add(FLinearColor(0.75, 0.75, 0.75, 1.0));
-		vertexColors_top.Add(FLinearColor(0.75, 0.75, 0.75, 1.0));
-	}
-
-	Floor_Mesh->CreateMeshSection_LinearColor(0, vertices_bottom, Triangles_bottom, normals_bottom, UV0_bottom, vertexColors_bottom, tangents_bottom, true);
-	Floor_Mesh->CreateMeshSection_LinearColor(1, vertices_top, Triangles_top, normals_top, UV0_top, vertexColors_top, tangents_top, true);
-
-	Floor_Mesh->RegisterComponentWithWorld(GetWorld());
-
-}
-void Aroom_description_builder::Create_Wall_Sections_New(Region<Pint> * source, float bottom, float top) {
-
-	for(auto border : source->getBounds()) {
-		auto border_points = border->getLoopEdges();
-
-		for (auto edge : border_points) {
-
-			Pint const A = edge->getStart()->getPosition();
-			Pint const B = edge->getEnd()->getPosition();
-
-			if ((B - A).SizeSquared() < 40) {
-				CreateWall(B, A, bottom, top);
-			}
-			else {
-				CreateDoor(B, A, bottom, top);
-			}
-		}
-	}
-}
 
 
 //==========================================================================================================
@@ -752,7 +498,7 @@ struct Type_Tracker {
 		for (auto room : Rooms) {
 			cleanRegion(room);
 			builder.Create_Floor_Ceiling_New(room, 0, 200);
-			builder.Create_Wall_Sections_New(room, 0, 200);
+			builder.Create_Wall_Sections_New(room, 0, 200, Nulls);
 			for (auto border : room->getBounds())
 				Draw_Border(toFVector(border->getLoopPoints()), 80, world, color_blue);
 		}
@@ -1034,6 +780,264 @@ void prototyper() {
 	} while (true);
 }*/
 
+//==========================================================================================================
+//======================================== creation ========================================================
+//==========================================================================================================
+
+void Aroom_description_builder::CreateWall(Pint const & wall_left, Pint const & wall_right, float bottom, float top) {
+
+	UProceduralMeshComponent* Wall_Mesh = NewObject<UProceduralMeshComponent>();
+	Wall_Mesh->AttachToComponent(root, FAttachmentTransformRules::KeepRelativeTransform);
+	Wall_Mesh->ContainsPhysicsTriMeshData(true);
+	Wall_Mesh->bUseAsyncCooking = true;
+
+	TArray<FVector> Vertices;
+	TArray<int32> Triangles;
+	TArray<FVector> Normals;
+	TArray<FVector2D> UV0;
+	TArray<FProcMeshTangent> Tangents;
+	TArray<FLinearColor> VertexColors;
+
+	FVector2D dir = convert(wall_left - wall_right);
+
+	dir.Normalize();
+	dir *= 30;//door radial width
+
+	Vertices.Push(FVector(convert(wall_left), bottom));
+	Vertices.Push(FVector(convert(wall_left), top));
+	Vertices.Push(FVector(convert(wall_right), bottom));
+	Vertices.Push(FVector(convert(wall_right), top));
+
+	Triangles.Push(3);
+	Triangles.Push(1);
+	Triangles.Push(2);
+	Triangles.Push(2);
+	Triangles.Push(1);
+	Triangles.Push(0);
+
+	FVector2D normal(dir.Y, -dir.X);
+	Normals.Push(FVector(normal, 0));
+	Normals.Push(FVector(normal, 0));
+	Normals.Push(FVector(normal, 0));
+	Normals.Push(FVector(normal, 0));
+	Normals.Push(FVector(normal, 0));
+	Normals.Push(FVector(normal, 0));
+	Normals.Push(FVector(normal, 0));
+	Normals.Push(FVector(normal, 0));
+
+	UV0.Push(FVector2D(0, bottom));
+	UV0.Push(FVector2D(0, top));
+	UV0.Push(FVector2D(1, bottom));
+	UV0.Push(FVector2D(1, top));
+
+	Tangents.Push(FProcMeshTangent(0, 0, 1));
+	Tangents.Push(FProcMeshTangent(0, 0, 1));
+	Tangents.Push(FProcMeshTangent(0, 0, 1));
+	Tangents.Push(FProcMeshTangent(0, 0, 1));
+
+	auto color = FLinearColor();
+	color.MakeRandomColor();
+	color.A = 1.0;
+	VertexColors.Push(color);
+	VertexColors.Push(color);
+	VertexColors.Push(color);
+	VertexColors.Push(color);
+
+	Wall_Mesh->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, UV0, VertexColors, Tangents, true);
+	Wall_Mesh->ContainsPhysicsTriMeshData(true);
+
+	Wall_Mesh->Activate();
+
+	Wall_Mesh->RegisterComponentWithWorld(GetWorld());
+}
+void Aroom_description_builder::CreateDoor(Pint const & wall_left, Pint const & wall_right, float bottom, float top) {
+	UProceduralMeshComponent* Wall_Mesh = NewObject<UProceduralMeshComponent>();
+	Wall_Mesh->AttachToComponent(root, FAttachmentTransformRules::KeepRelativeTransform);
+	Wall_Mesh->ContainsPhysicsTriMeshData(true);
+	Wall_Mesh->bUseAsyncCooking = true;
+
+	TArray<FVector> Vertices;
+	TArray<int32> Triangles;
+	TArray<FVector> Normals;
+	TArray<FVector2D> UV0;
+	TArray<FProcMeshTangent> Tangents;
+	TArray<FLinearColor> VertexColors;
+
+	FVector2D Mid = convert((wall_left + wall_right) / 2);
+	FVector2D dir = convert(wall_left - wall_right);
+
+	dir.Normalize();
+	dir *= 30;//door radial width
+	FVector2D doorframe_left = Mid + dir;
+	FVector2D doorframe_right = Mid - dir;
+
+	Vertices.Push(FVector(convert(wall_left), bottom));
+	Vertices.Push(FVector(convert(wall_left), top));
+	Vertices.Push(FVector(doorframe_left, bottom));
+	Vertices.Push(FVector(doorframe_left, top));
+	Vertices.Push(FVector(doorframe_right, bottom));
+	Vertices.Push(FVector(doorframe_right, top));
+	Vertices.Push(FVector(convert(wall_right), bottom));
+	Vertices.Push(FVector(convert(wall_right), top));
+
+	Triangles.Push(7);
+	Triangles.Push(5);
+	Triangles.Push(6);
+	Triangles.Push(6);
+	Triangles.Push(5);
+	Triangles.Push(4);
+
+	Triangles.Push(3);
+	Triangles.Push(1);
+	Triangles.Push(2);
+	Triangles.Push(2);
+	Triangles.Push(1);
+	Triangles.Push(0);
+
+	FVector2D normal(dir.Y, -dir.X);
+	Normals.Push(FVector(normal, 0));
+	Normals.Push(FVector(normal, 0));
+	Normals.Push(FVector(normal, 0));
+	Normals.Push(FVector(normal, 0));
+	Normals.Push(FVector(normal, 0));
+	Normals.Push(FVector(normal, 0));
+	Normals.Push(FVector(normal, 0));
+	Normals.Push(FVector(normal, 0));
+
+	UV0.Push(FVector2D(0, bottom));
+	UV0.Push(FVector2D(0, top));
+	UV0.Push(FVector2D(1, bottom));
+	UV0.Push(FVector2D(1, top));
+	UV0.Push(FVector2D(0, bottom));
+	UV0.Push(FVector2D(0, top));
+	UV0.Push(FVector2D(1, bottom));
+	UV0.Push(FVector2D(1, top));
+
+	Tangents.Push(FProcMeshTangent(0, 0, 1));
+	Tangents.Push(FProcMeshTangent(0, 0, 1));
+	Tangents.Push(FProcMeshTangent(0, 0, 1));
+	Tangents.Push(FProcMeshTangent(0, 0, 1));
+	Tangents.Push(FProcMeshTangent(0, 0, 1));
+	Tangents.Push(FProcMeshTangent(0, 0, 1));
+	Tangents.Push(FProcMeshTangent(0, 0, 1));
+	Tangents.Push(FProcMeshTangent(0, 0, 1));
+
+	auto color = FLinearColor();
+	color.MakeRandomColor();
+	color.A = 1.0;
+	VertexColors.Push(color);
+	VertexColors.Push(color);
+	VertexColors.Push(color);
+	VertexColors.Push(color);
+	VertexColors.Push(color);
+	VertexColors.Push(color);
+	VertexColors.Push(color);
+	VertexColors.Push(color);
+
+
+	const float door_height = 110;
+	if (top - bottom >= door_height) {
+		Vertices.Push(FVector(doorframe_left, bottom + door_height));
+		Vertices.Push(FVector(doorframe_right, bottom + door_height));
+
+		Triangles.Push(5);
+		Triangles.Push(3);
+		Triangles.Push(9);
+		Triangles.Push(9);
+		Triangles.Push(3);
+		Triangles.Push(8);
+
+		Normals.Push(FVector(normal, 0));
+		Normals.Push(FVector(normal, 0));
+
+		float uv_ratio = door_height / (top - bottom);
+		UV0.Push(FVector2D(0, uv_ratio));
+		UV0.Push(FVector2D(1, uv_ratio));
+
+		Tangents.Push(FProcMeshTangent(0, 0, 1));
+		Tangents.Push(FProcMeshTangent(0, 0, 1));
+
+		VertexColors.Push(color);
+		VertexColors.Push(color);
+	}
+
+	Wall_Mesh->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, UV0, VertexColors, Tangents, true);
+	Wall_Mesh->ContainsPhysicsTriMeshData(true);
+
+	Wall_Mesh->Activate();
+
+	Wall_Mesh->RegisterComponentWithWorld(GetWorld());
+}
+
+void Aroom_description_builder::Create_Floor_Ceiling_New(Region<Pint> * source, float bottom, float top) {
+	auto Border = toFVector(source->getBounds().last()->getLoopPoints());
+	Border = tri_utils::Reverse(Border);
+
+	TArray<int32> Index_Faked;
+	Index_Faked.SetNum(Border.Num());
+	for (int32 ii = 0; ii < Border.Num(); ii++) {
+		Index_Faked[ii] = ii;
+	}
+	TArray<int32> Triangles_top = tri_utils::Triangulate(Border, Index_Faked);
+	TArray<int32> Triangles_bottom = tri_utils::Reverse(Triangles_top);
+
+	UProceduralMeshComponent* Floor_Mesh = NewObject<UProceduralMeshComponent>();
+	Floor_Mesh->AttachToComponent(root, FAttachmentTransformRules::KeepRelativeTransform);
+	Floor_Mesh->ContainsPhysicsTriMeshData(true);
+	Floor_Mesh->bUseAsyncCooking = true;
+
+	TArray<FVector> vertices_bottom;
+	TArray<FVector> vertices_top;
+	TArray<FVector> normals_bottom;
+	TArray<FVector> normals_top;
+	TArray<FVector2D> UV0_bottom;
+	TArray<FVector2D> UV0_top;
+	TArray<FProcMeshTangent> tangents_bottom;
+	TArray<FProcMeshTangent> tangents_top;
+	TArray<FLinearColor> vertexColors_bottom;
+	TArray<FLinearColor> vertexColors_top;
+
+	for (auto& vector : Border) {
+		vertices_bottom.Add(FVector(vector.X, vector.Y, bottom));
+		vertices_top.Add(FVector(vector.X, vector.Y, top));
+		normals_bottom.Add(FVector(0, 0, 1));
+		normals_top.Add(FVector(0, 0, -1));
+		UV0_bottom.Add(vector / 10);
+		UV0_top.Add(vector / 10);
+		tangents_bottom.Add(FProcMeshTangent(0, 1, 0));
+		tangents_top.Add(FProcMeshTangent(0, 1, 0));
+		vertexColors_bottom.Add(FLinearColor(0.75, 0.75, 0.75, 1.0));
+		vertexColors_top.Add(FLinearColor(0.75, 0.75, 0.75, 1.0));
+	}
+
+	Floor_Mesh->CreateMeshSection_LinearColor(0, vertices_bottom, Triangles_bottom, normals_bottom, UV0_bottom, vertexColors_bottom, tangents_bottom, true);
+	Floor_Mesh->CreateMeshSection_LinearColor(1, vertices_top, Triangles_top, normals_top, UV0_top, vertexColors_top, tangents_top, true);
+
+	Floor_Mesh->RegisterComponentWithWorld(GetWorld());
+
+}
+void Aroom_description_builder::Create_Wall_Sections_New(Region<Pint> * source, float bottom, float top, FLL<Region<Pint> *> &Nulls) {
+
+	for (auto border : source->getBounds()) {
+		auto border_points = border->getLoopEdges();
+
+		for (auto edge : border_points) {
+
+			Pint const A = edge->getStart()->getPosition();
+			Pint const B = edge->getEnd()->getPosition();
+
+			Region<Pint> * op = edge->getInv()->getFace()->getGroup();
+
+			if ((B - A).SizeSquared() < 40 || Nulls.contains(op)) {
+				CreateWall(B, A, bottom, top);
+			}
+			else {
+				CreateDoor(B, A, bottom, top);
+			}
+		}
+	}
+}
+
 
 //==========================================================================================================
 //======================================= generation =======================================================
@@ -1142,8 +1146,63 @@ FLL<Pint> Pick_Generator(rto x, rto y, Pint center) {
 	//generates a set of trackers for each building Region<Pint>
 	//these come with predefined nulls and infrastructure halls
 //}
-
 bool createRoomAtPoint(Type_Tracker &system_types, Pint const &point, int64 scale = 1, FLL<Region<Pint> *> * created = nullptr) {
+	UE_LOG(LogTemp, Warning, TEXT("Create Room At Point %f,%f"), point.X.toFloat(), point.Y.toFloat());
+	FLL<Region<Pint> *> created_rooms;
+	FLL<Region<Pint> *> created_nulls;
+	FLL<Region<Pint> *> raw_faces;
+
+	Region<Pint> * choice = nullptr;
+
+	//find containing null
+	for (auto null : system_types.Nulls) {
+		if (contains(null, point).type != FaceRelationType::point_exterior) {
+			choice = null;
+			break;
+		}
+	}
+
+	if (choice == nullptr) {
+		UE_LOG(LogTemp, Warning, TEXT("Selected point is not in a null region\n"));
+		return false;
+	}
+
+	system_types.Nulls.remove(choice);
+
+	int64 area = FMath::RandRange(6, 14);
+	int64 width = FMath::RandRange(2, area / 2);
+	int64 length = area / width;
+
+	UE_LOG(LogTemp, Warning, TEXT("size: %d %d"), width, length);
+
+	auto bounds = Pick_Generator(width * scale, length * scale, point);
+
+
+
+	//cull to null Region<Pint>
+	UE_LOG(LogTemp, Warning, TEXT("CR - allocate node\n"));
+	subAllocate(choice, bounds, created_nulls, raw_faces);
+
+	//remerge rejected regions with nulls
+	for (auto face : raw_faces) {
+		Cull_Suggested(face, created_rooms, created_nulls);
+	}
+
+	//system_types.Nulls.absorb(created_nulls);
+
+	cleanNulls(system_types, created_nulls);
+
+	if (created != nullptr) {
+		created->append(created_rooms);
+	}
+
+	bool success = !created_rooms.empty();
+
+	system_types.Rooms.absorb(created_rooms);
+
+	return success;
+}
+bool createRectangleAtPoint(Type_Tracker &system_types, Pint const &point, int64 scale = 1, FLL<Region<Pint> *> * created = nullptr) {
 	UE_LOG(LogTemp, Warning, TEXT("Create Room At Point %f,%f"),point.X.toFloat(), point.Y.toFloat());
 	FLL<Region<Pint> *> created_rooms;
 	FLL<Region<Pint> *> created_nulls;
@@ -1353,7 +1412,21 @@ void create_Layout(Type_Tracker &system_types, int64 large, int64 medium, int64 
 		//point.toGrid(P_micro_grid);
 		FLL<Region<Pint> *> temp_created;
 
-		if (createRoomAtPoint(system_types, point, 7, &temp_created))
+		if (createRectangleAtPoint(system_types, point, 7, &temp_created))
+			UE_LOG(LogTemp, Warning, TEXT("Created %d sub-rooms \n"), temp_created.size());
+
+		//for (auto room : temp_created) {
+		//	larges.Push(new building_region(0, room));
+		//}
+	}
+
+	for (int64 ii = 0; ii < medium; ii++) {
+		//pick point
+		auto point = boxUniformPoint(140, 140, 27) - Pint(70, 70);
+		//point.toGrid(P_micro_grid);
+		FLL<Region<Pint> *> temp_created;
+
+		if (createRoomAtPoint(system_types, point, 5, &temp_created))
 			UE_LOG(LogTemp, Warning, TEXT("Created %d sub-rooms \n"), temp_created.size());
 
 		//for (auto room : temp_created) {
@@ -1437,7 +1510,7 @@ void Aroom_description_builder::Main_Generation_Loop() {
 	
 	system_types.Nulls.append(system_new.region(system_bounds));
 
-	create_Layout(system_types, room_count, 3, 2, GetWorld());
+	create_Layout(system_types, large_count, medium_count, 2, GetWorld());
 
 	system_types.display(*this);
 }
@@ -1459,7 +1532,8 @@ Aroom_description_builder::Aroom_description_builder()
 
 	RootComponent = root;
 
-	room_count = 40;
+	large_count = 4;
+	medium_count = 10;
 
 	area_factor = 4;
 	area_scale = 300;

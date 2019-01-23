@@ -33,7 +33,10 @@ class ROOM_BUILDER_API Aroom_description_builder : public AActor
 		USceneComponent* root;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-		int32 room_count;
+		int32 large_count;
+
+	UPROPERTY(EditAnyWhere, Category = "gen_config")
+		int32 medium_count;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
 		int32 area_factor;
@@ -66,7 +69,7 @@ public:
 	void CreateDoor(Pint const & wall_left, Pint const & wall_right, float bottom, float top);
 
 	void Create_Floor_Ceiling_New(Region<Pint> * source, float bottom, float top);
-	void Create_Wall_Sections_New(Region<Pint> * source, float bottom, float top);
+	void Create_Wall_Sections_New(Region<Pint> * source, float bottom, float top, FLL<Region<Pint> *> &Nulls);
 
 	void Main_Generation_Loop();
 
