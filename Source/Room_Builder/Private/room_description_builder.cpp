@@ -258,6 +258,9 @@ namespace chord_splits
 
 				Pint const segment = intersect - A_start;
 
+				if (!A_angle.test(segment))
+					continue;
+
 				rto const distance = segment.SizeSquared();
 
 				if(distance < thresh)
@@ -498,7 +501,7 @@ struct Type_Tracker {
 		for (auto room : Rooms) {
 			cleanRegion(room);
 			builder.Create_Floor_Ceiling_New(room, 0, 200);
-			builder.Create_Wall_Sections_New(room, 0, 200, Nulls);
+			builder.Create_Wall_Sections_New(room, 0, 200, Rooms);
 			for (auto border : room->getBounds())
 				Draw_Border(toFVector(border->getLoopPoints()), 80, world, color_blue);
 		}
@@ -507,7 +510,8 @@ struct Type_Tracker {
 		for (auto null : Nulls) {
 			cleanRegion(null);
 			for (auto border : null->getBounds())
-				Draw_Border(toFVector(border->getLoopPoints()), 30 + (i++)*5, world, color_red);
+				Draw_Border(toFVector(border->getLoopPoints()), 0 + i*15, world, color_red);
+			i++;
 		}
 
 		for (auto hall : Halls) {
@@ -1016,7 +1020,7 @@ void Aroom_description_builder::Create_Floor_Ceiling_New(Region<Pint> * source, 
 	Floor_Mesh->RegisterComponentWithWorld(GetWorld());
 
 }
-void Aroom_description_builder::Create_Wall_Sections_New(Region<Pint> * source, float bottom, float top, FLL<Region<Pint> *> &Nulls) {
+void Aroom_description_builder::Create_Wall_Sections_New(Region<Pint> * source, float bottom, float top, FLL<Region<Pint> *> &Rooms) {
 
 	for (auto border : source->getBounds()) {
 		auto border_points = border->getLoopEdges();
@@ -1028,7 +1032,7 @@ void Aroom_description_builder::Create_Wall_Sections_New(Region<Pint> * source, 
 
 			Region<Pint> * op = edge->getInv()->getFace()->getGroup();
 
-			if ((B - A).SizeSquared() < 40 || Nulls.contains(op)) {
+			if ((B - A).SizeSquared() < 40 || !Rooms.contains(op)) {
 				CreateWall(B, A, bottom, top);
 			}
 			else {

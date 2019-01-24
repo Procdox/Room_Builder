@@ -14,3 +14,8 @@ broken seeds:
 - 3 larges / 45 mediums
     infinite recursion upon cutting a strand of a room directly along an edge
     SOLVED, == and != or RTO-EX were referencing the local n instead of target.n
+- 7 large / 2 mediums
+    null face has its own region, despite belonging to the existing region
+    SOLVED, clean cuts didnt check against a angles after determining intersect
+-7 large / 20-25 mediums
+    nullptr reference in suballocate, seems to be caused by a jump from exterior to interior
