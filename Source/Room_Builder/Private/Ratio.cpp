@@ -186,8 +186,8 @@ rto rto::operator/(const rto & target) const
 	int64 i = gcd(t_a, t_b);
 	int64 j = gcd(d, target.d);
 
-	int64 x = (t_a / i)*(target.d*j);
-	int64 y = (t_b / i)*(d*j);
+	int64 x = (t_a / i) * (target.d / j);
+	int64 y = (t_b / i) * (d / j);
 
 	int64 z = gcd(x, y);
 

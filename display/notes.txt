@@ -17,5 +17,8 @@ broken seeds:
 - 7 large / 2 mediums
     null face has its own region, despite belonging to the existing region
     SOLVED, clean cuts didnt check against a angles after determining intersect
--7 large / 20-25 mediums
+- 7 large / 24 mediums
     nullptr reference in suballocate, seems to be caused by a jump from exterior to interior
+    we have an overflow occuring in markRegion - findIntersects
+    SOLVED, RTP-EX division was incorrectly multiplying by gcd instead of dividing
+- 7 large / 3 mediums

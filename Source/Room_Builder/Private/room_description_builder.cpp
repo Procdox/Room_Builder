@@ -580,6 +580,8 @@ void cleanNulls(Type_Tracker &target, FLL<Region<Pint> *> &input_nulls) {
 		input_halls.absorb(room_outs);
 	}
 
+	UE_LOG(LogTemp, Warning, TEXT("Clean Halls\n"));
+
 	for (auto focus : input_halls) {
 
 		FLL<Region<Pint> *> hall_ins;
