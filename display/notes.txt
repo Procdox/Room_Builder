@@ -13,3 +13,4 @@ broken seeds:
     SOLVED, parameters to betweenAngles was swapped for end bound cuts
 - 3 larges / 45 mediums
     infinite recursion upon cutting a strand of a room directly along an edge
+    SOLVED, == and != or RTO-EX were referencing the local n instead of target.n

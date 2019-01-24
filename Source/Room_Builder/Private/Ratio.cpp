@@ -373,7 +373,7 @@ bool rto::operator==(const int64 & test) const
 
 bool rto::operator==(const rto & target) const
 {
-	return (o*d + n == target.o*target.d + n) && (d == target.d);
+	return (o*d + n == target.o*target.d + target.n) && (d == target.d);
 }
 
 bool rto::operator!=(const int64 & test) const
@@ -383,7 +383,7 @@ bool rto::operator!=(const int64 & test) const
 
 bool rto::operator!=(const rto & target) const
 {
-	return (o*d + n != target.o*target.d + n) || (d != target.d);
+	return (o*d + n != target.o*target.d + target.n) || (d != target.d);
 }
 
 bool rto::operator>(const int64 & test) const
