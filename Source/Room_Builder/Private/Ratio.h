@@ -54,5 +54,7 @@ public:
 	bool operator<=(const int64 &test) const;
 	bool operator<=(const rto &test) const;
 
+	rto round() const;
+
 	float toFloat() const;
 };

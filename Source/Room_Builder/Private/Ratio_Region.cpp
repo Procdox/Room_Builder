@@ -2,7 +2,7 @@
 #include <cmath>
 
 #define debug_suballocate
-#define debug_merge
+//#define debug_merge
 //#define debug_clean
 
 #if defined(debug_suballocate) || defined(debug_merge) || defined(debug_clean)

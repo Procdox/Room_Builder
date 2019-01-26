@@ -201,11 +201,7 @@ rto Pint::area(FLL<Pint> const & boundary) {
 rto linear_offset(Pint const &A, Pint const &B) {
 
 	rto denom = (A.X * A.X + A.Y * A.Y);
+	rto top = (A.Y * B.Y + A.X * B.X);
 
-	rto t = (A.Y * B.Y + A.X * B.X) / denom;
-
-	rto distance = t;
-
-	return distance;
-
+	return top / denom;
 }
