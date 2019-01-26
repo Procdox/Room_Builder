@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "ProceduralMeshComponent.h"
-#include "Ratio_Region.h"
+#include "Grid_Region.h"
 #include "room_description_builder.generated.h"
 
 USTRUCT()
@@ -65,11 +65,11 @@ public:
 	// Sets default values for this actor's properties
 	Aroom_description_builder();
 
-	void CreateWall(Pint const & wall_left, Pint const & wall_right, float bottom, float top);
-	void CreateDoor(Pint const & wall_left, Pint const & wall_right, float bottom, float top);
+	void CreateWall(Pgrd const & wall_left, Pgrd const & wall_right, float bottom, float top);
+	void CreateDoor(Pgrd const & wall_left, Pgrd const & wall_right, float bottom, float top);
 
-	void Create_Floor_Ceiling_New(Region<Pint> * source, float bottom, float top);
-	void Create_Wall_Sections_New(Region<Pint> * source, float bottom, float top, FLL<Region<Pint> *> &Nulls);
+	void Create_Floor_Ceiling_New(Region<Pgrd> * source, float bottom, float top);
+	void Create_Wall_Sections_New(Region<Pgrd> * source, float bottom, float top, FLL<Region<Pgrd> *> &Nulls);
 
 	void Main_Generation_Loop();
 

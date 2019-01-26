@@ -3,7 +3,7 @@
 typedef signed long long int64;
 
 #define grid_size 65536
-#define grid_epsilon 32
+#define grid_epsilon 256
 
 class grd {
 	int64 n;

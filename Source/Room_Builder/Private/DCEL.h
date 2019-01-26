@@ -731,7 +731,7 @@ class Region {
 
 	DCEL<_P> * universe;
 
-	Region(DCEL<Pint> * uni) {
+	Region(DCEL<_P> * uni) {
 		universe = uni;
 	}
 	~Region() {
@@ -754,7 +754,7 @@ public:
 		return Boundaries.size();
 	}
 
-	void append(Face<Pint> * border) {
+	void append(Face<_P> * border) {
 		if (border->group != this) {
 			if (border->group != nullptr) {
 				border->group->remove(border);
@@ -764,7 +764,7 @@ public:
 			Boundaries.push(border);
 		}
 	}
-	void remove(Face<Pint> * border) {
+	void remove(Face<_P> * border) {
 		if (border->group == this) {
 			border->group = nullptr;
 			Boundaries.remove(border);

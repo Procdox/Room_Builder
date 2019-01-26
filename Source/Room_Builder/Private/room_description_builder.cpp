@@ -11,11 +11,11 @@
 //========================================== transforms ====================================================
 //==========================================================================================================
 
-FVector2D convert(Pint const &target) {
+FVector2D convert(Pgrd const &target) {
 	return FVector2D(target.X.toFloat() * 10, target.Y.toFloat() * 10);
 }
 
-TArray<FVector2D> toFVector(FLL<Pint> const &target) {
+TArray<FVector2D> toFVector(FLL<Pgrd> const &target) {
 	TArray<FVector2D> product;
 
 	for (auto point : target) {
@@ -55,27 +55,27 @@ void Draw_Border(const TArray<FVector2D> &border, float height, const UWorld *re
 }
 
 
-Pint circularUniformPoint(rto radius = 1, int64 divisions = 100) {
+Pgrd circularUniformPoint(grd radius = 1, int64 divisions = 100) {
 	float t = 2 * PI*FMath::RandRange(0.f, 1.f);
 	float u = FMath::RandRange(0.f, 1.f) + FMath::RandRange(0.f, 1.f);
 	float r = u;
 	if (u > 1)
 		r = 2 - u;
 	r *= divisions;
-	return Pint(r*cos(t),r*sin(t)) * radius / divisions;
+	return Pgrd(r*cos(t),r*sin(t)) * radius / divisions;
 
 }
-Pint boxUniformPoint(rto width = 10, rto height = 10, int64 divisions = 100) {
-	return Pint(width * (int64)FMath::RandRange(0, divisions), height * (int64)FMath::RandRange(0, divisions)) / divisions;
+Pgrd boxUniformPoint(grd width = 10, grd height = 10, int64 divisions = 100) {
+	return Pgrd(width * (int64)FMath::RandRange(0, divisions), height * (int64)FMath::RandRange(0, divisions)) / divisions;
 }
-Pint boxUniformPoint(PBox const & box, int64 divisions = 100) {
+Pgrd boxUniformPoint(PBox const & box, int64 divisions = 100) {
 	int64 X = (int64)FMath::RandRange(-(float)divisions, (float)divisions);
 	int64 Y = (int64)FMath::RandRange(-(float)divisions, (float)divisions);
 
-	return Pint(X, Y) * box.getExtent() + box.getCenter();
+	return Pgrd(X, Y) * box.getExtent() + box.getCenter();
 }
 
-PBox getBounds(Region<Pint> * target) {
+PBox getBounds(Region<Pgrd> * target) {
 
 	PBox result;
 
@@ -109,20 +109,20 @@ namespace chord_splits
 
 	struct split_canidate 
 	{
-		Edge<Pint> * A_edge;
-		Edge<Pint> * B_edge;
-		Pint A;
-		Pint B;
-		rto distance;
+		Edge<Pgrd> * A_edge;
+		Edge<Pgrd> * B_edge;
+		Pgrd A;
+		Pgrd B;
+		grd distance;
 	};
 
 	//returns if test is between A and B clockwise (right about the origin from A, left about from B)
-	bool betweenVectors(Pint const &A, Pint const &B, Pint const &test) {
+	bool betweenVectors(Pgrd const &A, Pgrd const &B, Pgrd const &test) {
 
-		Pint A_inward(A.Y, -A.X);
-		Pint B_inward(-B.Y, B.X);
+		Pgrd A_inward(A.Y, -A.X);
+		Pgrd B_inward(-B.Y, B.X);
 
-		rto bounds_relation = A_inward.Dot(B);
+		grd bounds_relation = A_inward.Dot(B);
 
 		if (bounds_relation > 0) {
 			//the angle between bounds is in (0,180)
@@ -141,11 +141,11 @@ namespace chord_splits
 	}
 
 	struct bvs {
-		Pint A_inward;
-		Pint B_inward;
-		rto bounds_relation;
+		Pgrd A_inward;
+		Pgrd B_inward;
+		grd bounds_relation;
 
-		bool test(Pint const &test) const {
+		bool test(Pgrd const &test) const {
 			if (bounds_relation > 0) {
 				//the angle between bounds is in (0,180)
 				return A_inward.Dot(test) > 0 && B_inward.Dot(test) > 0;
@@ -162,7 +162,7 @@ namespace chord_splits
 			}
 		}
 
-		bvs(Pint const &A, Pint const &B) {
+		bvs(Pgrd const &A, Pgrd const &B) {
 			A_inward.X = A.Y;
 			A_inward.Y = -A.X;
 
@@ -175,13 +175,13 @@ namespace chord_splits
 
 #define debug_chords
 
-	void chord_clean(Region<Pint> * target, rto const & thresh, FLL<Region<Pint> *> & ins, FLL<Region<Pint> *> & outs) {
+	void chord_clean(Region<Pgrd> * target, grd const & thresh, FLL<Region<Pgrd> *> & ins, FLL<Region<Pgrd> *> & outs) {
 		//if no pair is small enough to split, add to ins and return
 		split_canidate result;
-		rto diameter = thresh + 1;
+		grd diameter = thresh + 1;
 		bool found_option = false;
 
-		FLL<Edge<Pint> *> relevants;
+		FLL<Edge<Pgrd> *> relevants;
 
 		for (auto border : target->getBounds()) {
 			border->getLoopEdges(relevants);
@@ -191,15 +191,15 @@ namespace chord_splits
 #endif
 
 
-		rto min_offset, max_offset;
+		grd min_offset, max_offset;
 
 		for (auto edge : relevants) {
 
-			Pint const A_start = edge->getEnd()->getPosition();
-			Pint const A_before = edge->getStart()->getPosition();
-			Pint const A_after = edge->getNext()->getEnd()->getPosition();
+			Pgrd const A_start = edge->getEnd()->getPosition();
+			Pgrd const A_before = edge->getStart()->getPosition();
+			Pgrd const A_after = edge->getNext()->getEnd()->getPosition();
 
-			Pint const A = A_start - A_before;
+			Pgrd const A = A_start - A_before;
 
 			bvs const A_angle(A_after - A_start, A_before - A_start);
 
@@ -207,9 +207,9 @@ namespace chord_splits
 			max_offset = min_offset;
 
 			for (auto compare : relevants) {
-				Pint const B_start = compare->getStart()->getPosition();
+				Pgrd const B_start = compare->getStart()->getPosition();
 
-				rto const raw = linear_offset(A, B_start);
+				grd const raw = linear_offset(A, B_start);
 
 				if (min_offset > raw)
 					min_offset = raw;
@@ -223,24 +223,24 @@ namespace chord_splits
 
 				//get smallest points
 				
-				Pint const B_end = compare->getEnd()->getPosition();
+				Pgrd const B_end = compare->getEnd()->getPosition();
 
-				Pint const B_segment = B_end - B_start;
-				Pint const B_perp(-B_segment.Y, B_segment.X);
+				Pgrd const B_segment = B_end - B_start;
+				Pgrd const B_perp(-B_segment.Y, B_segment.X);
 
 				if (!A_angle.test(B_perp))
 					continue;
 
-				Pint const offset = A_start - B_start;
+				Pgrd const offset = A_start - B_start;
 
 				if (B_perp.Dot(offset) >= 0)
 					continue;
 
-				Pint intersect;
+				Pgrd intersect;
 
 				if (offset.Dot(B_end - B_start) <= 0) {
 					intersect = B_start;
-					Pint const B_last = compare->getLast()->getStart()->getPosition();
+					Pgrd const B_last = compare->getLast()->getStart()->getPosition();
 
 					if (!betweenVectors(B_end - B_start, B_last - B_start, offset))
 						continue;
@@ -248,20 +248,20 @@ namespace chord_splits
 				else if ((A_start - B_end).Dot(B_start - B_end) <= 0){
 					intersect = B_end;
 
-					Pint const B_next = compare->getNext()->getEnd()->getPosition();
+					Pgrd const B_next = compare->getNext()->getEnd()->getPosition();
 
 					if (!betweenVectors(B_next - B_end, B_start - B_end, A_start - B_end))
 						continue;
 				}
 				else
-					Pint::getIntersect(B_start, B_end, A_start, A_start + B_perp, intersect);
+					Pgrd::getIntersect(B_start, B_end, A_start, A_start + B_perp, intersect);
 
-				Pint const segment = intersect - A_start;
+				Pgrd const segment = intersect - A_start;
 
 				if (!A_angle.test(segment))
 					continue;
 
-				rto const distance = segment.SizeSquared();
+				grd const distance = segment.SizeSquared();
 
 				if(distance < thresh)
 					if (!found_option || distance < result.distance) {						
@@ -281,8 +281,8 @@ namespace chord_splits
 					}
 			}
 
-			rto const t = max_offset - min_offset;
-			rto const offset = t * t * (A.X * A.X + A.Y * A.Y);
+			grd const t = max_offset - min_offset;
+			grd const offset = t * t * (A.X * A.X + A.Y * A.Y);
 #ifdef debug_chords
 			UE_LOG(LogTemp, Warning, TEXT("offset: %f"), offset.toFloat());
 #endif
@@ -476,11 +476,11 @@ namespace tri_utils
 //==========================================================================================================
 
 struct Type_Tracker {
-	FLL<Region<Pint> *> Nulls;
-	FLL<Region<Pint> *> Rooms;
-	FLL<Region<Pint> *> Halls;
-	FLL<Region<Pint> *> Smalls;
-	bool isRoom(Region<Pint> const * target) {
+	FLL<Region<Pgrd> *> Nulls;
+	FLL<Region<Pgrd> *> Rooms;
+	FLL<Region<Pgrd> *> Halls;
+	FLL<Region<Pgrd> *> Smalls;
+	bool isRoom(Region<Pgrd> const * target) {
 		for (auto room : Rooms) {
 			if (room == target) {
 				return true;
@@ -522,11 +522,11 @@ struct Type_Tracker {
 	}
 };
 
-bool Cull_Suggested(Region<Pint> * target, FLL<Region<Pint> *> &results, FLL<Region<Pint> *> &nulls) {
+bool Cull_Suggested(Region<Pgrd> * target, FLL<Region<Pgrd> *> &results, FLL<Region<Pgrd> *> &nulls) {
 	UE_LOG(LogTemp, Warning, TEXT("Culling\n"));
 
-	FLL<Region<Pint> *> rooms;
-	FLL<Region<Pint>*> outers;
+	FLL<Region<Pgrd> *> rooms;
+	FLL<Region<Pgrd>*> outers;
 
 	cleanRegion(target);
 
@@ -538,7 +538,7 @@ bool Cull_Suggested(Region<Pint> * target, FLL<Region<Pint> *> &results, FLL<Reg
 	return true;
 }
 
-void mergeGroup(FLL<Region<Pint> *> & nulls) {
+void mergeGroup(FLL<Region<Pgrd> *> & nulls) {
 	UE_LOG(LogTemp, Warning, TEXT("Merging Group\n"));
 	for (auto focus = nulls.begin(); focus != nulls.end(); ++focus) {
 		merge(*focus, *focus);
@@ -554,18 +554,18 @@ void mergeGroup(FLL<Region<Pint> *> & nulls) {
 	}
 }
 
-void cleanNulls(Type_Tracker &target, FLL<Region<Pint> *> &input_nulls) {
+void cleanNulls(Type_Tracker &target, FLL<Region<Pgrd> *> &input_nulls) {
 	UE_LOG(LogTemp, Warning, TEXT("Clean Nulls\n"));
 
-	//FLL<Region<Pint> *> input_nulls;
-	FLL<Region<Pint> *> input_halls;
+	//FLL<Region<Pgrd> *> input_nulls;
+	FLL<Region<Pgrd> *> input_halls;
 	//input_nulls.absorb(target.Nulls);
 	mergeGroup(input_nulls);
 
 	for (auto focus : input_nulls) {
 
-		FLL<Region<Pint> *> room_ins;
-		FLL<Region<Pint> *> room_outs;
+		FLL<Region<Pgrd> *> room_ins;
+		FLL<Region<Pgrd> *> room_outs;
 
 		cleanRegion(focus);
 
@@ -584,8 +584,8 @@ void cleanNulls(Type_Tracker &target, FLL<Region<Pint> *> &input_nulls) {
 
 	for (auto focus : input_halls) {
 
-		FLL<Region<Pint> *> hall_ins;
-		FLL<Region<Pint> *> hall_outs;
+		FLL<Region<Pgrd> *> hall_ins;
+		FLL<Region<Pgrd> *> hall_outs;
 
 		cleanRegion(focus);
 
@@ -612,7 +612,7 @@ void cleanNulls(Type_Tracker &target, FLL<Region<Pint> *> &input_nulls) {
 }
 
 /*
-FLL<Pint> choosePointsNear(Region<Pint> const & target, int64 count, rto offset){
+FLL<Pgrd> choosePointsNear(Region<Pgrd> const & target, int64 count, grd offset){
 	//pick n points AWAY from the polygon
 	//get center offsets of each face
 	
@@ -620,7 +620,7 @@ FLL<Pint> choosePointsNear(Region<Pint> const & target, int64 count, rto offset)
 	auto extent = bounds.getExtent();
 	auto center = bounds.getCenter();
 	
-	rto size = 2;
+	grd size = 2;
 
 	if (extent.X > extent.Y) {
 		size *= extent.X;
@@ -631,30 +631,30 @@ FLL<Pint> choosePointsNear(Region<Pint> const & target, int64 count, rto offset)
 
 	auto segments = target.getLoopPoints();
 
-	FLL<Pint> seeds;
+	FLL<Pgrd> seeds;
 	for (int64 ii = 0; ii < count; ii++) {
-		Pint seed = circularUniformPoint(size);
+		Pgrd seed = circularUniformPoint(size);
 		seed.X += center.X;
 		seed.Y += center.Y;
 
 		//seeds.Push(seed);
 
-		Pint best(0,0);
+		Pgrd best(0,0);
 		float best_score = FLT_MAX;
 
 		for (auto focus = segments.begin(); focus != segments.end(); ++focus) {
-			Pint A = *focus;
-			Pint B = *(focus.cyclic_next());
+			Pgrd A = *focus;
+			Pgrd B = *(focus.cyclic_next());
 			
-			Pint AB = B - A;
-			Pint AP = seed - A;
+			Pgrd AB = B - A;
+			Pgrd AP = seed - A;
 
-			rto length = AB.SizeSquared();
-			rto dot = (AP.X * AB.X + AP.Y * AB.Y);
+			grd length = AB.SizeSquared();
+			grd dot = (AP.X * AB.X + AP.Y * AB.Y);
 
-			rto t = dot / length;
+			grd t = dot / length;
 
-			Pint point = AB * t + A;
+			Pgrd point = AB * t + A;
 		}
 
 		seeds.append(best);
@@ -744,8 +744,8 @@ void prototyper() {
 	//after delete insignificant hallways, (consider length, objective reached, room touched)
 
 	//if a hallway -becomes- insignificant, merge its last child into it, if no children, delete
-	//Face<Pint>* start;
-	//Face<Pint>* end;
+	//Face<Pgrd>* start;
+	//Face<Pgrd>* end;
 
 	TArray<HallwayPrototype*> frontier;
 
@@ -790,7 +790,7 @@ void prototyper() {
 //======================================== creation ========================================================
 //==========================================================================================================
 
-void Aroom_description_builder::CreateWall(Pint const & wall_left, Pint const & wall_right, float bottom, float top) {
+void Aroom_description_builder::CreateWall(Pgrd const & wall_left, Pgrd const & wall_right, float bottom, float top) {
 
 	UProceduralMeshComponent* Wall_Mesh = NewObject<UProceduralMeshComponent>();
 	Wall_Mesh->AttachToComponent(root, FAttachmentTransformRules::KeepRelativeTransform);
@@ -856,7 +856,7 @@ void Aroom_description_builder::CreateWall(Pint const & wall_left, Pint const & 
 
 	Wall_Mesh->RegisterComponentWithWorld(GetWorld());
 }
-void Aroom_description_builder::CreateDoor(Pint const & wall_left, Pint const & wall_right, float bottom, float top) {
+void Aroom_description_builder::CreateDoor(Pgrd const & wall_left, Pgrd const & wall_right, float bottom, float top) {
 	UProceduralMeshComponent* Wall_Mesh = NewObject<UProceduralMeshComponent>();
 	Wall_Mesh->AttachToComponent(root, FAttachmentTransformRules::KeepRelativeTransform);
 	Wall_Mesh->ContainsPhysicsTriMeshData(true);
@@ -975,7 +975,7 @@ void Aroom_description_builder::CreateDoor(Pint const & wall_left, Pint const & 
 	Wall_Mesh->RegisterComponentWithWorld(GetWorld());
 }
 
-void Aroom_description_builder::Create_Floor_Ceiling_New(Region<Pint> * source, float bottom, float top) {
+void Aroom_description_builder::Create_Floor_Ceiling_New(Region<Pgrd> * source, float bottom, float top) {
 	auto Border = toFVector(source->getBounds().last()->getLoopPoints());
 	Border = tri_utils::Reverse(Border);
 
@@ -1022,17 +1022,17 @@ void Aroom_description_builder::Create_Floor_Ceiling_New(Region<Pint> * source, 
 	Floor_Mesh->RegisterComponentWithWorld(GetWorld());
 
 }
-void Aroom_description_builder::Create_Wall_Sections_New(Region<Pint> * source, float bottom, float top, FLL<Region<Pint> *> &Rooms) {
+void Aroom_description_builder::Create_Wall_Sections_New(Region<Pgrd> * source, float bottom, float top, FLL<Region<Pgrd> *> &Rooms) {
 
 	for (auto border : source->getBounds()) {
 		auto border_points = border->getLoopEdges();
 
 		for (auto edge : border_points) {
 
-			Pint const A = edge->getStart()->getPosition();
-			Pint const B = edge->getEnd()->getPosition();
+			Pgrd const A = edge->getStart()->getPosition();
+			Pgrd const B = edge->getEnd()->getPosition();
 
-			Region<Pint> * op = edge->getInv()->getFace()->getGroup();
+			Region<Pgrd> * op = edge->getInv()->getFace()->getGroup();
 
 			if ((B - A).SizeSquared() < 40 || !Rooms.contains(op)) {
 				CreateWall(B, A, bottom, top);
@@ -1050,47 +1050,47 @@ void Aroom_description_builder::Create_Wall_Sections_New(Region<Pint> * source, 
 //==========================================================================================================
 
 
-FLL<Pint> Square_Generator(rto x, rto y, Pint center) {
-	FLL<Pint> boundary;
-	boundary.append(Pint(-x, -y) + center);
-	boundary.append(Pint(-x, y) + center);
-	boundary.append(Pint(x, y) + center);
-	boundary.append(Pint(x, -y) + center);
+FLL<Pgrd> Square_Generator(grd x, grd y, Pgrd center) {
+	FLL<Pgrd> boundary;
+	boundary.append(Pgrd(-x, -y) + center);
+	boundary.append(Pgrd(-x, y) + center);
+	boundary.append(Pgrd(x, y) + center);
+	boundary.append(Pgrd(x, -y) + center);
 
 	return boundary;
 }
-FLL<Pint> Diamond_Generator(rto x, rto y, Pint center) {
-	FLL<Pint> boundary;
+FLL<Pgrd> Diamond_Generator(grd x, grd y, Pgrd center) {
+	FLL<Pgrd> boundary;
 	if (x < y) {
-		rto d = y - x;
-		boundary.append(Pint(-x, -d) + center);
-		boundary.append(Pint(-x, d) + center);
-		boundary.append(Pint(0, y) + center);
-		boundary.append(Pint(x, d) + center);
-		boundary.append(Pint(x, -d) + center);
-		boundary.append(Pint(0, -y) + center);
+		grd d = y - x;
+		boundary.append(Pgrd(-x, -d) + center);
+		boundary.append(Pgrd(-x, d) + center);
+		boundary.append(Pgrd(0, y) + center);
+		boundary.append(Pgrd(x, d) + center);
+		boundary.append(Pgrd(x, -d) + center);
+		boundary.append(Pgrd(0, -y) + center);
 	}
 	else if (x > y) {
-		rto d = x - y;
-		boundary.append(Pint(-x, 0) + center);
-		boundary.append(Pint(-d, y) + center);
-		boundary.append(Pint(d, y) + center);
-		boundary.append(Pint(x, 0) + center);
-		boundary.append(Pint(d, -y) + center);
-		boundary.append(Pint(-d, -y) + center);
+		grd d = x - y;
+		boundary.append(Pgrd(-x, 0) + center);
+		boundary.append(Pgrd(-d, y) + center);
+		boundary.append(Pgrd(d, y) + center);
+		boundary.append(Pgrd(x, 0) + center);
+		boundary.append(Pgrd(d, -y) + center);
+		boundary.append(Pgrd(-d, -y) + center);
 	}
 	else {
-		boundary.append(Pint(-x, 0) + center);
-		boundary.append(Pint(0, x) + center);
-		boundary.append(Pint(x, 0) + center);
-		boundary.append(Pint(0, -x) + center);
+		boundary.append(Pgrd(-x, 0) + center);
+		boundary.append(Pgrd(0, x) + center);
+		boundary.append(Pgrd(x, 0) + center);
+		boundary.append(Pgrd(0, -x) + center);
 	}
 	
 
 	return boundary;
 }
-FLL<Pint> Bevel_Generator(rto x, rto y, Pint center) {
-	rto level;
+FLL<Pgrd> Bevel_Generator(grd x, grd y, Pgrd center) {
+	grd level;
 	if (x < y) {
 		level = x / 4;
 	}
@@ -1098,25 +1098,25 @@ FLL<Pint> Bevel_Generator(rto x, rto y, Pint center) {
 		level = y / 4;
 	}
 
-	FLL<Pint> boundary;
+	FLL<Pgrd> boundary;
 
-	boundary.append(Pint(-x, level - y) + center);
-	boundary.append(Pint(-x, y - level) + center);
-	boundary.append(Pint(level - x, y) + center);
-	boundary.append(Pint(x - level, y) + center);
-	boundary.append(Pint(x, y - level) + center);
-	boundary.append(Pint(x, level - y) + center);
-	boundary.append(Pint(x - level, -y) + center);
-	boundary.append(Pint(level - x, -y) + center);
+	boundary.append(Pgrd(-x, level - y) + center);
+	boundary.append(Pgrd(-x, y - level) + center);
+	boundary.append(Pgrd(level - x, y) + center);
+	boundary.append(Pgrd(x - level, y) + center);
+	boundary.append(Pgrd(x, y - level) + center);
+	boundary.append(Pgrd(x, level - y) + center);
+	boundary.append(Pgrd(x - level, -y) + center);
+	boundary.append(Pgrd(level - x, -y) + center);
 
 	return boundary;
 }
-FLL<Pint> Rectangle_Generator(rto x, rto y, Pint center) {
-	rto skew = (int64)FMath::RandRange((float)0, (float)10);
-	Pint angle(skew / 10, (rto(10) - skew) / 10);
-	Pint perp((skew - 10) / 10, skew / 10);
+FLL<Pgrd> Rectangle_Generator(grd x, grd y, Pgrd center) {
+	grd skew = (int64)FMath::RandRange((float)0, (float)10);
+	Pgrd angle(skew / 10, (grd(10) - skew) / 10);
+	Pgrd perp((skew - 10) / 10, skew / 10);
 
-	FLL<Pint> boundary;
+	FLL<Pgrd> boundary;
 
 	boundary.append(center - angle * x - perp * y);
 	boundary.append(center - angle * x + perp * y);
@@ -1126,9 +1126,9 @@ FLL<Pint> Rectangle_Generator(rto x, rto y, Pint center) {
 	return boundary;
 }
 
-typedef FLL<Pint> (*generatorFunc)(rto, rto, Pint);
+typedef FLL<Pgrd> (*generatorFunc)(grd, grd, Pgrd);
 
-FLL<Pint> Pick_Generator(rto x, rto y, Pint center) {
+FLL<Pgrd> Pick_Generator(grd x, grd y, Pgrd center) {
 	generatorFunc generator = Square_Generator;
 	float gen_choice = FMath::RandRange(0, 1);
 	if (gen_choice > .4) {
@@ -1148,17 +1148,17 @@ FLL<Pint> Pick_Generator(rto x, rto y, Pint center) {
 	return generator(x, y, center);
 }
 
-//void Generate_Building_Shape(Face<Pint>* Available, Type_Tracker &system_types) {
-	//generates a set of trackers for each building Region<Pint>
+//void Generate_Building_Shape(Face<Pgrd>* Available, Type_Tracker &system_types) {
+	//generates a set of trackers for each building Region<Pgrd>
 	//these come with predefined nulls and infrastructure halls
 //}
-bool createRoomAtPoint(Type_Tracker &system_types, Pint const &point, int64 scale = 1, FLL<Region<Pint> *> * created = nullptr) {
+bool createRoomAtPoint(Type_Tracker &system_types, Pgrd const &point, int64 scale = 1, FLL<Region<Pgrd> *> * created = nullptr) {
 	UE_LOG(LogTemp, Warning, TEXT("Create Room At Point %f,%f"), point.X.toFloat(), point.Y.toFloat());
-	FLL<Region<Pint> *> created_rooms;
-	FLL<Region<Pint> *> created_nulls;
-	FLL<Region<Pint> *> raw_faces;
+	FLL<Region<Pgrd> *> created_rooms;
+	FLL<Region<Pgrd> *> created_nulls;
+	FLL<Region<Pgrd> *> raw_faces;
 
-	Region<Pint> * choice = nullptr;
+	Region<Pgrd> * choice = nullptr;
 
 	//find containing null
 	for (auto null : system_types.Nulls) {
@@ -1185,7 +1185,7 @@ bool createRoomAtPoint(Type_Tracker &system_types, Pint const &point, int64 scal
 
 
 
-	//cull to null Region<Pint>
+	//cull to null Region<Pgrd>
 	UE_LOG(LogTemp, Warning, TEXT("CR - allocate node\n"));
 	subAllocate(choice, bounds, created_nulls, raw_faces);
 
@@ -1208,13 +1208,13 @@ bool createRoomAtPoint(Type_Tracker &system_types, Pint const &point, int64 scal
 
 	return success;
 }
-bool createRectangleAtPoint(Type_Tracker &system_types, Pint const &point, int64 scale = 1, FLL<Region<Pint> *> * created = nullptr) {
+bool createRectangleAtPoint(Type_Tracker &system_types, Pgrd const &point, int64 scale = 1, FLL<Region<Pgrd> *> * created = nullptr) {
 	UE_LOG(LogTemp, Warning, TEXT("Create Room At Point %f,%f"),point.X.toFloat(), point.Y.toFloat());
-	FLL<Region<Pint> *> created_rooms;
-	FLL<Region<Pint> *> created_nulls;
-	FLL<Region<Pint> *> raw_faces;
+	FLL<Region<Pgrd> *> created_rooms;
+	FLL<Region<Pgrd> *> created_nulls;
+	FLL<Region<Pgrd> *> raw_faces;
 	
-	Region<Pint> * choice = nullptr;
+	Region<Pgrd> * choice = nullptr;
 
 	//find containing null
 	for (auto null : system_types.Nulls) {
@@ -1241,7 +1241,7 @@ bool createRectangleAtPoint(Type_Tracker &system_types, Pint const &point, int64
 
 	
 
-	//cull to null Region<Pint>
+	//cull to null Region<Pgrd>
 	UE_LOG(LogTemp, Warning, TEXT("CR - allocate node\n"));
 	subAllocate(choice, bounds, created_nulls, raw_faces);
 
@@ -1265,7 +1265,7 @@ bool createRectangleAtPoint(Type_Tracker &system_types, Pint const &point, int64
 	return success;
 }
 //attempts to create rooms distributed evenly across the space
-bool createDistributedRooms(Type_Tracker &system_types, const int64 attempts_per_cell = 5, int64 scale = 1, FLL<Region<Pint> *> *created = nullptr) {
+bool createDistributedRooms(Type_Tracker &system_types, const int64 attempts_per_cell = 5, int64 scale = 1, FLL<Region<Pgrd> *> *created = nullptr) {
 	//GRID METHOD
 	//from a grid, for each grid point we select a point within a tolerance radius
 	//choose a grid
@@ -1278,17 +1278,17 @@ bool createDistributedRooms(Type_Tracker &system_types, const int64 attempts_per
 #define grid_height 10
 #define tolerance 4
 
-	Pint offset = boxUniformPoint(grid_width, grid_height);
-	Pint skew = boxUniformPoint(grid_width, grid_height);
+	Pgrd offset = boxUniformPoint(grid_width, grid_height);
+	Pgrd skew = boxUniformPoint(grid_width, grid_height);
 
 	for (int64 xx = -5; xx <= 5; xx++) {
 		for (int64 yy = -5; yy <= 5; yy++) {
 			//test a couple points until we find one in the space
 			int64 safety = attempts_per_cell;
-			Pint grid = Pint(xx * grid_width, yy * grid_height) + offset + Pint(skew.X*yy, skew.Y*xx);
+			Pgrd grid = Pgrd(xx * grid_width, yy * grid_height) + offset + Pgrd(skew.X*yy, skew.Y*xx);
 
 			do {
-				Pint choice = circularUniformPoint(tolerance) + grid;
+				Pgrd choice = circularUniformPoint(tolerance) + grid;
 				choice *= 100.f;
 				//choice.toGrid(100.f);
 
@@ -1308,7 +1308,7 @@ bool createDistributedRooms(Type_Tracker &system_types, const int64 attempts_per
 	//_P choice = circularUniformPoint();
 }
 
-bool fillNullSpace(Type_Tracker &system_types, int64 safety = 100, int64 scale = 1, FLL<Region<Pint> *> *created = nullptr) {
+bool fillNullSpace(Type_Tracker &system_types, int64 safety = 100, int64 scale = 1, FLL<Region<Pgrd> *> *created = nullptr) {
 	while (!system_types.Nulls.empty() && (safety--) > 0) {
 
 		auto bounds = getBounds(system_types.Nulls.last());
@@ -1320,7 +1320,7 @@ bool fillNullSpace(Type_Tracker &system_types, int64 safety = 100, int64 scale =
 	return true;
 }
 
-bool createNearRooms(Type_Tracker &system_types, Region<Pint> * target, int64 attempts = 10, int64 scale = 1, FLL<Region<Pint> *> *created = nullptr, const UWorld* ref = nullptr) {
+bool createNearRooms(Type_Tracker &system_types, Region<Pgrd> * target, int64 attempts = 10, int64 scale = 1, FLL<Region<Pgrd> *> *created = nullptr, const UWorld* ref = nullptr) {
 	
 	//auto seeds = choosePointsNear(target, 3 * attempts, 4);
 
@@ -1373,7 +1373,7 @@ bool createNearRooms(Type_Tracker &system_types, Region<Pint> * target, int64 at
 	return true;
 }
 
-bool createLinkingHalls(Region<Pint> * target, FLL<Region<Pint> *> &nulls, FLL<Region<Pint> *> &created_faces) {
+bool createLinkingHalls(Region<Pgrd> * target, FLL<Region<Pgrd> *> &nulls, FLL<Region<Pgrd> *> &created_faces) {
 	//tries to generate a set of halls linking two target faces
 
 	return true;
@@ -1381,14 +1381,14 @@ bool createLinkingHalls(Region<Pint> * target, FLL<Region<Pint> *> &nulls, FLL<R
 
 struct building_region {
 	int64 size;
-	Region<Pint> * region;
+	Region<Pgrd> * region;
 	building_region * parent;
-	building_region(int64 s, Region<Pint> * r) {
+	building_region(int64 s, Region<Pgrd> * r) {
 		size = s;
 		region = r;
 		parent = nullptr;
 	}
-	building_region(int64 s, Region<Pint> * r, building_region * p) {
+	building_region(int64 s, Region<Pgrd> * r, building_region * p) {
 		size = s;
 		region = r;
 		parent = p;
@@ -1404,9 +1404,9 @@ void create_Layout(Type_Tracker &system_types, int64 large, int64 medium, int64 
 	TArray<building_region*> mediums;
 	TArray<building_region*> smalls;
 
-	//FLL<Region<Pint> *> temp_created;
+	//FLL<Region<Pgrd> *> temp_created;
 
-	//createRoomAtPoint(system_types, Pint(0,0), 7, &temp_created);
+	//createRoomAtPoint(system_types, Pgrd(0,0), 7, &temp_created);
 
 	//for (auto room : temp_created) {
 	//	larges.Push(new building_region(0, room));
@@ -1414,9 +1414,9 @@ void create_Layout(Type_Tracker &system_types, int64 large, int64 medium, int64 
 
 	for (int64 ii = 0; ii < large; ii++) {
 		//pick point
-		auto point = boxUniformPoint(140,140) - Pint(70, 70);
+		auto point = boxUniformPoint(140,140) - Pgrd(70, 70);
 		//point.toGrid(P_micro_grid);
-		FLL<Region<Pint> *> temp_created;
+		FLL<Region<Pgrd> *> temp_created;
 
 		if (createRectangleAtPoint(system_types, point, 7, &temp_created))
 			UE_LOG(LogTemp, Warning, TEXT("Created %d sub-rooms \n"), temp_created.size());
@@ -1428,9 +1428,9 @@ void create_Layout(Type_Tracker &system_types, int64 large, int64 medium, int64 
 
 	for (int64 ii = 0; ii < medium; ii++) {
 		//pick point
-		auto point = boxUniformPoint(140, 140, 27) - Pint(70, 70);
+		auto point = boxUniformPoint(140, 140, 27) - Pgrd(70, 70);
 		//point.toGrid(P_micro_grid);
-		FLL<Region<Pint> *> temp_created;
+		FLL<Region<Pgrd> *> temp_created;
 
 		if (createRoomAtPoint(system_types, point, 5, &temp_created))
 			UE_LOG(LogTemp, Warning, TEXT("Created %d sub-rooms \n"), temp_created.size());
@@ -1441,22 +1441,22 @@ void create_Layout(Type_Tracker &system_types, int64 large, int64 medium, int64 
 	}
 
 	/*{
-		FLL<Region<Pint> *> temp_created;
-		fakeCreate(system_types, Pint(rto(28), rto(-68) / 5), Bevel_Generator, 3, 2, &temp_created);
+		FLL<Region<Pgrd> *> temp_created;
+		fakeCreate(system_types, Pgrd(grd(28), grd(-68) / 5), Bevel_Generator, 3, 2, &temp_created);
 		for (auto room : temp_created) {
 			larges.Push(new building_region(0, room));
 		}
 	}
 	{
-		FLL<Region<Pint> *> temp_created;
-		fakeCreate(system_types, Pint(rto(28), rto(152) / 5), Bevel_Generator, 3, 3, &temp_created);
+		FLL<Region<Pgrd> *> temp_created;
+		fakeCreate(system_types, Pgrd(grd(28), grd(152) / 5), Bevel_Generator, 3, 3, &temp_created);
 		for (auto room : temp_created) {
 			larges.Push(new building_region(0, room));
 		}
 	}
 	{
-		FLL<Region<Pint> *> temp_created;
-		fakeCreate(system_types, Pint(rto(28)/5, rto(-151) / 5), Square_Generator, 5, 2, &temp_created);
+		FLL<Region<Pgrd> *> temp_created;
+		fakeCreate(system_types, Pgrd(grd(28)/5, grd(-151) / 5), Square_Generator, 5, 2, &temp_created);
 		for (auto room : temp_created) {
 			larges.Push(new building_region(0, room));
 		}
@@ -1465,7 +1465,7 @@ void create_Layout(Type_Tracker &system_types, int64 large, int64 medium, int64 
 
 	//UE_LOG(LogTemp, Warning, TEXT("Larges created: %d\n"), larges.Num());
 
-	/*FLL<Face<Pint> *> temp_created;
+	/*FLL<Face<Pgrd> *> temp_created;
 	createRoomAtPoint(system_types, _P(10 * grid_coef, -10 * grid_coef), 1, &temp_created);
 	createRoomAtPoint(system_types, _P(-5 * grid_coef, -8 * grid_coef), 1, &temp_created);
 	for (auto room : temp_created) {
@@ -1475,7 +1475,7 @@ void create_Layout(Type_Tracker &system_types, int64 large, int64 medium, int64 
 
 	/*for (auto large : larges) {
 		//creates some MEDIUMS
-		FLL<Region<Pint> *> temp_created;
+		FLL<Region<Pgrd> *> temp_created;
 		createNearRooms(system_types, large->region, medium, 5, &temp_created, ref);
 		for (auto room : temp_created) {
 			mediums.Push(new building_region(1, room, large));
@@ -1483,7 +1483,7 @@ void create_Layout(Type_Tracker &system_types, int64 large, int64 medium, int64 
 	}
 	for (auto medium : mediums) {
 		//creates some MEDIUMS
-		FLL<Region<Pint> *> temp_created;
+		FLL<Region<Pgrd> *> temp_created;
 		createNearRooms(system_types, medium->region, small, 4, &temp_created, ref);
 		for (auto room : temp_created) {
 			smalls.Push(new building_region(2, room, medium));
@@ -1503,14 +1503,14 @@ void create_Layout(Type_Tracker &system_types, int64 large, int64 medium, int64 
 
 void Aroom_description_builder::Main_Generation_Loop() {
 	UE_LOG(LogTemp, Warning, TEXT("Main Generation"));
-	DCEL<Pint> system_new;
+	DCEL<Pgrd> system_new;
 	Type_Tracker system_types;
 
 	int seed = 45732;// FMath::RandRange(0, 100000);
 	FMath::RandInit(seed);
 	UE_LOG(LogTemp, Warning, TEXT("SRand Seed %d\n"), seed);
 
-	auto system_bounds = Square_Generator(100, 100, Pint(0,0));
+	auto system_bounds = Square_Generator(100, 100, Pgrd(0,0));
 
 	Draw_Border(toFVector(system_bounds), 0, GetWorld());
 	
