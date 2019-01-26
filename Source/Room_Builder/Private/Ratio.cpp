@@ -118,8 +118,10 @@ rto rto::operator+(int64 factor) const
 
 rto rto::operator+(const rto & target) const
 {
-	int64 t = safe_add(safe_mul(n, target.d), safe_mul(target.n, d));
-	int64 y = safe_mul(target.d, d);
+	int64 p = gcd(d, target.d);
+
+	int64 t = safe_add(safe_mul(n, target.d / p), safe_mul(target.n, d / p));
+	int64 y = safe_mul(target.d, d / p);
 
 	int64 c = t / y;
 	int64 x = safe_sub(t,safe_mul(c, y));
@@ -142,8 +144,10 @@ rto rto::operator-(int64 factor) const
 
 rto rto::operator-(const rto & target) const
 {
-	int64 t = safe_sub(safe_mul(n, target.d), safe_mul(target.n, d));
-	int64 y = safe_mul(target.d, d);
+	int64 p = gcd(d, target.d);
+
+	int64 t = safe_sub(safe_mul(n, target.d / p), safe_mul(target.n, d / p));
+	int64 y = safe_mul(target.d, d / p);
 
 	int64 c = t / y;
 	int64 x = safe_sub(t, safe_mul(c, y));
@@ -261,8 +265,10 @@ rto & rto::operator+=(int64 factor)
 
 rto & rto::operator+=(const rto & target)
 {
-	int64 t = safe_add(safe_mul(n, target.d), safe_mul(target.n, d));
-	int64 y = safe_mul(target.d, d);
+	int64 p = gcd(d, target.d);
+
+	int64 t = safe_add(safe_mul(n, target.d / p), safe_mul(target.n, d / p));
+	int64 y = safe_mul(target.d, d / p);
 
 	int64 c = t / y;
 	int64 x = safe_sub(t, safe_mul(c, y));
@@ -290,8 +296,10 @@ rto & rto::operator-=(int64 factor)
 
 rto & rto::operator-=(const rto & target)
 {
-	int64 t = safe_sub(safe_mul(n, target.d), safe_mul(target.n, d));
-	int64 y = safe_mul(target.d, d);
+	int64 p = gcd(d, target.d);
+
+	int64 t = safe_sub(safe_mul(n, target.d / p), safe_mul(target.n, d / p));
+	int64 y = safe_mul(target.d, d / p);
 
 	int64 c = t / y;
 	int64 x = safe_sub(t, safe_mul(c, y));
