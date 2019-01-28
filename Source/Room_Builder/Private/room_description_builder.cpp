@@ -12,7 +12,7 @@
 //==========================================================================================================
 
 FVector2D convert(Pgrd const &target) {
-	return FVector2D(target.X.toFloat() * 10, target.Y.toFloat() * 10);
+	return FVector2D(target.X.n * 10, target.Y.n * 10);
 }
 
 TArray<FVector2D> toFVector(FLL<Pgrd> const &target) {
@@ -272,8 +272,8 @@ namespace chord_splits
 						result.B = intersect;
 
 #ifdef debug_chords
-						UE_LOG(LogTemp, Warning, TEXT("split: (%f,%f) to (%f,%f), distance %f"), result.A.X.toFloat(),
-							result.A.Y.toFloat(), result.B.X.toFloat(), result.B.Y.toFloat(), result.distance.toFloat());
+						UE_LOG(LogTemp, Warning, TEXT("split: (%f,%f) to (%f,%f), distance %f"), result.A.X.n,
+							result.A.Y.n, result.B.X.n, result.B.Y.n, result.distance.n);
 #endif
 
 						result.A_edge = edge;
@@ -284,7 +284,7 @@ namespace chord_splits
 			grd const t = max_offset - min_offset;
 			grd const offset = t * t * (A.X * A.X + A.Y * A.Y);
 #ifdef debug_chords
-			UE_LOG(LogTemp, Warning, TEXT("offset: %f"), offset.toFloat());
+			UE_LOG(LogTemp, Warning, TEXT("offset: %f"), offset.n);
 #endif
 			if (offset < diameter)
 				diameter = offset;
@@ -311,7 +311,7 @@ namespace chord_splits
 			for (auto face : target->getBounds()) {
 				UE_LOG(LogTemp, Warning, TEXT("Face >k-"));
 				for (auto point : face->getLoopPoints()) {
-					UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.toFloat(), point.Y.toFloat());
+					UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.n, point.Y.n);
 				}
 			}
 #endif
@@ -322,7 +322,7 @@ namespace chord_splits
 			for (auto face : target->getBounds()) {
 				UE_LOG(LogTemp, Warning, TEXT("Face >r:"));
 				for (auto point : face->getLoopPoints()) {
-					UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.toFloat(), point.Y.toFloat());
+					UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.n, point.Y.n);
 				}
 			}
 			if (P != nullptr) {
@@ -330,7 +330,7 @@ namespace chord_splits
 				for (auto face : P->getBounds()) {
 					UE_LOG(LogTemp, Warning, TEXT("Face >b:"));
 					for (auto point : face->getLoopPoints()) {
-						UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.toFloat(), point.Y.toFloat());
+						UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.n, point.Y.n);
 					}
 				}
 			}
@@ -1153,7 +1153,7 @@ FLL<Pgrd> Pick_Generator(grd x, grd y, Pgrd center) {
 	//these come with predefined nulls and infrastructure halls
 //}
 bool createRoomAtPoint(Type_Tracker &system_types, Pgrd const &point, int64 scale = 1, FLL<Region<Pgrd> *> * created = nullptr) {
-	UE_LOG(LogTemp, Warning, TEXT("Create Room At Point %f,%f"), point.X.toFloat(), point.Y.toFloat());
+	UE_LOG(LogTemp, Warning, TEXT("Create Room At Point %f,%f"), point.X.n, point.Y.n);
 	FLL<Region<Pgrd> *> created_rooms;
 	FLL<Region<Pgrd> *> created_nulls;
 	FLL<Region<Pgrd> *> raw_faces;
@@ -1209,7 +1209,7 @@ bool createRoomAtPoint(Type_Tracker &system_types, Pgrd const &point, int64 scal
 	return success;
 }
 bool createRectangleAtPoint(Type_Tracker &system_types, Pgrd const &point, int64 scale = 1, FLL<Region<Pgrd> *> * created = nullptr) {
-	UE_LOG(LogTemp, Warning, TEXT("Create Room At Point %f,%f"),point.X.toFloat(), point.Y.toFloat());
+	UE_LOG(LogTemp, Warning, TEXT("Create Room At Point %f,%f"),point.X.n, point.Y.n);
 	FLL<Region<Pgrd> *> created_rooms;
 	FLL<Region<Pgrd> *> created_nulls;
 	FLL<Region<Pgrd> *> raw_faces;

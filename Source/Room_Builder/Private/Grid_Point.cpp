@@ -15,7 +15,7 @@ Pgrd Pgrd::operator+(const Pgrd &target) const {
 Pgrd Pgrd::operator-(const Pgrd &target) const {
 	return Pgrd(X - target.X, Y - target.Y);
 }
-Pgrd Pgrd::operator*(int64 factor) const
+Pgrd Pgrd::operator*(double factor) const
 {
 	return Pgrd(X * factor, Y * factor);
 }
@@ -25,7 +25,7 @@ Pgrd Pgrd::operator*(grd factor) const {
 Pgrd Pgrd::operator*(const Pgrd &target) const {
 	return Pgrd(X * target.X, Y * target.Y);
 }
-Pgrd Pgrd::operator/(int64 factor) const
+Pgrd Pgrd::operator/(double factor) const
 {
 	return Pgrd(X / factor, Y / factor);
 }
@@ -46,7 +46,7 @@ Pgrd& Pgrd::operator-=(const Pgrd &target) {
 	Y -= target.Y;
 	return *this;
 }
-Pgrd & Pgrd::operator*=(int64 factor)
+Pgrd & Pgrd::operator*=(double factor)
 {
 	X *= factor;
 	Y *= factor;
@@ -64,7 +64,7 @@ Pgrd& Pgrd::operator*=(const Pgrd &target) {
 	Y *= target.Y;
 	return *this;
 }
-Pgrd & Pgrd::operator/=(int64 factor)
+Pgrd & Pgrd::operator/=(double factor)
 {
 	X /= factor;
 	Y /= factor;

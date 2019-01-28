@@ -26,19 +26,19 @@ struct Pgrd {
 
 	Pgrd operator+(const Pgrd &target) const;
 	Pgrd operator-(const Pgrd &target) const;
-	Pgrd operator*(int64 factor) const;
+	Pgrd operator*(double factor) const;
 	Pgrd operator*(grd factor) const;
 	Pgrd operator*(const Pgrd &target) const;
-	Pgrd operator/(int64 factor) const;
+	Pgrd operator/(double factor) const;
 	Pgrd operator/(grd factor) const;
 	Pgrd operator/(const Pgrd &target) const;
 
 	Pgrd& operator+=(const Pgrd &target);
 	Pgrd& operator-=(const Pgrd &target);
-	Pgrd& operator*=(int64 factor);
+	Pgrd& operator*=(double factor);
 	Pgrd& operator*=(grd factor);
 	Pgrd& operator*=(const Pgrd &target);
-	Pgrd& operator/=(int64 factor);
+	Pgrd& operator/=(double factor);
 	Pgrd& operator/=(grd factor);
 	Pgrd& operator/=(const Pgrd &target);
 

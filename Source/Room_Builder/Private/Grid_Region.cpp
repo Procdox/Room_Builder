@@ -185,14 +185,14 @@ bool merge(Region<Pgrd> * a, Region<Pgrd> * b) {
 		for (auto bound : a->getBounds()) {
 			UE_LOG(LogTemp, Warning, TEXT("face >k-"));
 			for (auto point : bound->getLoopPoints()) {
-				UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.toFloat(), point.Y.toFloat());
+				UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.n, point.Y.n);
 			}
 		}
 		UE_LOG(LogTemp, Warning, TEXT("b"));
 		for (auto bound : b->getBounds()) {
 			UE_LOG(LogTemp, Warning, TEXT("face >b-"));
 			for (auto point : bound->getLoopPoints()) {
-				UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.toFloat(), point.Y.toFloat());
+				UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.n, point.Y.n);
 			}
 		}
 #endif
@@ -216,7 +216,7 @@ bool merge(Region<Pgrd> * a, Region<Pgrd> * b) {
 		for (auto bound : a->getBounds()) {
 			UE_LOG(LogTemp, Warning, TEXT("face >r:"));
 			for (auto point : bound->getLoopPoints()) {
-				UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.toFloat(), point.Y.toFloat());
+				UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.n, point.Y.n);
 			}
 		}
 #endif
@@ -229,7 +229,7 @@ bool merge(Region<Pgrd> * a, Region<Pgrd> * b) {
 		for (auto bound : a->getBounds()) {
 			UE_LOG(LogTemp, Warning, TEXT("face >k:"));
 			for (auto point : bound->getLoopPoints()) {
-				UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.toFloat(), point.Y.toFloat());
+				UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.n, point.Y.n);
 			}
 		}
 #endif
@@ -258,7 +258,7 @@ bool merge(Region<Pgrd> * a, Region<Pgrd> * b) {
 		for (auto bound : a->getBounds()) {
 			UE_LOG(LogTemp, Warning, TEXT("face >r:"));
 			for (auto point : bound->getLoopPoints()) {
-				UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.toFloat(), point.Y.toFloat());
+				UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.n, point.Y.n);
 			}
 		}
 #endif
@@ -607,13 +607,13 @@ void subAllocate(Region<Pgrd> * target, FLL<Pgrd> const & boundary,
 	UE_LOG(LogTemp, Warning, TEXT("SA"));
 	UE_LOG(LogTemp, Warning, TEXT("Boundary >g:"));
 	for (auto point : boundary) {
-		UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.toFloat(), point.Y.toFloat());
+		UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.n, point.Y.n);
 	}
 
 	for (auto face : target->getBounds()) {
 		UE_LOG(LogTemp, Warning, TEXT("Face >k-"));
 		for (auto point : face->getLoopPoints()) {
-			UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.toFloat(), point.Y.toFloat());
+			UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.n, point.Y.n);
 		}
 	}
 #endif
@@ -634,13 +634,13 @@ void subAllocate(Region<Pgrd> * target, FLL<Pgrd> const & boundary,
 #ifdef debug_suballocate
 	for (auto detail : details) {
 		if (detail->type == FaceRelationType::point_exterior) {
-			UE_LOG(LogTemp, Warning, TEXT("(%f,%f) : exterior"), detail->location.X.toFloat(), detail->location.Y.toFloat());
+			UE_LOG(LogTemp, Warning, TEXT("(%f,%f) : exterior"), detail->location.X.n, detail->location.Y.n);
 		}
 		else if (detail->type == FaceRelationType::point_interior) {
-			UE_LOG(LogTemp, Warning, TEXT("(%f,%f) : interior"), detail->location.X.toFloat(), detail->location.Y.toFloat());
+			UE_LOG(LogTemp, Warning, TEXT("(%f,%f) : interior"), detail->location.X.n, detail->location.Y.n);
 		}
 		else {
-			UE_LOG(LogTemp, Warning, TEXT("(%f,%f) : bound"), detail->location.X.toFloat(), detail->location.Y.toFloat());
+			UE_LOG(LogTemp, Warning, TEXT("(%f,%f) : bound"), detail->location.X.n, detail->location.Y.n);
 		}
 
 	}
@@ -745,7 +745,7 @@ void cleanRegion(Region<Pgrd> * target) {
 #ifdef debug_clean
 		UE_LOG(LogTemp, Warning, TEXT("Face >k:"));
 		for (auto point : border->getLoopPoints()) {
-			UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.toFloat(), point.Y.toFloat());
+			UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), point.X.n, point.Y.n);
 		}
 #endif
 
@@ -778,11 +778,11 @@ void cleanRegion(Region<Pgrd> * target) {
 				if (parallel) {
 #ifdef debug_clean
 					UE_LOG(LogTemp, Warning, TEXT("contract >r:"));
-					UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), start.X.toFloat(), start.Y.toFloat());
-					UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), mid.X.toFloat(), mid.Y.toFloat());
+					UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), start.X.n, start.Y.n);
+					UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), mid.X.n, mid.Y.n);
 					UE_LOG(LogTemp, Warning, TEXT("contract >g:"));
-					UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), mid.X.toFloat(), mid.Y.toFloat());
-					UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), end.X.toFloat(), end.Y.toFloat());
+					UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), mid.X.n, mid.Y.n);
+					UE_LOG(LogTemp, Warning, TEXT("(%f,%f)"), end.X.n, end.Y.n);
 #endif
 					next->getInv()->contract();
 				}
