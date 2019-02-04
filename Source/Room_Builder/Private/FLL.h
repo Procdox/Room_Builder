@@ -173,6 +173,17 @@ public:
 		}
 	};
 
+	FLL<_T> & operator=(FLL<_T> && reference) {
+		head = reference.head;
+		tail = reference.tail;
+		length = reference.length;
+
+		reference.head = nullptr;
+		reference.tail = nullptr;
+		reference.length = 0;
+
+		return *this;
+	};
 	FLL<_T> & operator=(FLL<_T> const & reference) {
 		FLL_node * focus = reference.head;
 		head = nullptr;
@@ -208,7 +219,7 @@ public:
 
 		length++;
 	}
-	void append(FLL<_T> reference) {
+	void append(FLL<_T> const & reference) {
 		FLL_node * focus = reference.head;
 
 		while (focus != nullptr) {

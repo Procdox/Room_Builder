@@ -8,21 +8,42 @@
 #include "Grid_Region.h"
 #include "room_description_builder.generated.h"
 
-USTRUCT()
-struct FRoom_Prototype {
-	GENERATED_BODY()
+//Used to track regions within a DCEL and categorize them
+struct Type_Tracker {
+	DCEL<Pgrd> * system;
 
-		UPROPERTY(EditAnyWhere)
-		TArray<FVector2D> Border;
-	UPROPERTY(EditAnyWhere)
-		float Bottom_Height;
-	UPROPERTY(EditAnyWhere)
-		float Top_Height;
-	UPROPERTY(EditAnyWhere)
-		TArray<FVector2D> Wall_Sections;
-	UPROPERTY(EditAnyWhere)
-		TArray<FVector2D> Door_Sections;
+	float min_room_width;
+	float min_hall_width;
+
+	FLL<Region<Pgrd> *> Exteriors;
+	FLL<Region<Pgrd> *> Nulls;
+	FLL<Region<Pgrd> *> Rooms;
+	FLL<Region<Pgrd> *> Halls;
+	FLL<Region<Pgrd> *> Smalls;
+	bool isRoom(Region<Pgrd> const * target) {
+		for (auto room : Rooms) {
+			if (room == target) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	Type_Tracker(DCEL<Pgrd> * sys, float room, float hall) {
+		system = sys;
+
+		Exteriors.append(sys->region());
+
+		min_room_width = room;
+		min_hall_width = hall;
+	}
+
+	FLL<Region<Pgrd> *> cleanNulls(FLL<Region<Pgrd> *> &input_nulls);
+	FLL<Region<Pgrd> *> createRoomFromBoundary(FLL<Pgrd> const &boundary);
+	FLL<Region<Pgrd> *> createHallFromBoundary(FLL<Pgrd> const &boundary);
+	FLL<Region<Pgrd> *> createNullFromBoundary(FLL<Pgrd> const &boundary);
 };
+
 
 UCLASS()
 class ROOM_BUILDER_API Aroom_description_builder : public AActor
@@ -30,34 +51,42 @@ class ROOM_BUILDER_API Aroom_description_builder : public AActor
 	GENERATED_BODY()
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-		USceneComponent* root;
+	bool use_static_seed;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-		int32 large_count;
+	int32 random_seed;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-		int32 medium_count;
+	USceneComponent* root;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-		int32 area_factor;
+	int32 unalligned_count;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-		int32 area_scale;
+	int32 alligned_count;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-		int32 room_factor;
+	float wall_thickness;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-		int32 room_scale;
+	float room_height;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-		float min_ratio;
+	float door_height;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-		int32 min_area;
+	float door_width;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-		int32 min_width;
+	float min_room_width;
+
+	UPROPERTY(EditAnyWhere, Category = "gen_config")
+	float min_hall_width;
+
+	UPROPERTY(EditAnyWhere, Category = "gen_config")
+	TArray<FVector2D> A_list;
+	UPROPERTY(EditAnyWhere, Category = "gen_config")
+	TArray<FVector2D> B_list;
 
 	UProceduralMeshComponent* CollisionMesh;
 
@@ -65,11 +94,17 @@ public:
 	// Sets default values for this actor's properties
 	Aroom_description_builder();
 
-	void CreateWall(Pgrd const & wall_left, Pgrd const & wall_right, float bottom, float top);
-	void CreateDoor(Pgrd const & wall_left, Pgrd const & wall_right, float bottom, float top);
+	UProceduralMeshComponent * CreateMeshComponent();
+	void ActivateMeshComponent(UProceduralMeshComponent * component);
 
-	void Create_Floor_Ceiling_New(Region<Pgrd> * source, float bottom, float top);
-	void Create_Wall_Sections_New(Region<Pgrd> * source, float bottom, float top, FLL<Region<Pgrd> *> &Nulls);
+	void CreateWallSegment(Edge<Pgrd> const * target, float bottom, float top, UProceduralMeshComponent * component, int section_id);
+	void CreateDoorSegment(Edge<Pgrd> const * target, float bottom, float top, UProceduralMeshComponent * component, int section_id);
+	void CreateWindowSegment(Edge<Pgrd> const * target, float bottom, float top, UProceduralMeshComponent * component, int section_id);
+
+	void CreateFloorAndCeiling(Region<Pgrd> * source, float bottom, float top);
+	void CreateWallSections(Region<Pgrd> * source, float bottom, float top, Type_Tracker & tracker);
+
+	void Create_System(Type_Tracker & tracker);
 
 	void Main_Generation_Loop();
 

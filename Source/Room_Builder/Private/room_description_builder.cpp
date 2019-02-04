@@ -4,9 +4,6 @@
 #include "Algo/Reverse.h"
 #include "DrawDebugHelpers.h"
 
-#define room_min_width 300
-#define hall_min_width 200
-
 //==========================================================================================================
 //========================================== transforms ====================================================
 //==========================================================================================================
@@ -173,12 +170,12 @@ namespace chord_splits
 		}
 	};
 
-#define debug_chords
+//#define debug_chords
 
 	void chord_clean(Region<Pgrd> * target, grd const & thresh, FLL<Region<Pgrd> *> & ins, FLL<Region<Pgrd> *> & outs) {
 		//if no pair is small enough to split, add to ins and return
 		split_canidate result;
-		grd diameter = thresh + 1;
+		grd diameter = thresh+1;
 		bool found_option = false;
 
 		FLL<Edge<Pgrd> *> relevants;
@@ -205,6 +202,43 @@ namespace chord_splits
 
 			min_offset = linear_offset(A, A_start);
 			max_offset = min_offset;
+
+			//ear clip attempt
+			{
+				Pgrd const B_start = edge->getNext()->getNext()->getEnd()->getPosition();
+				Pgrd const B_end = edge->getNext()->getNext()->getNext()->getEnd()->getPosition();
+
+				Pgrd A_normal = A;
+				A_normal.Normalize();
+
+				Pgrd B_normal = B_end - B_start;
+				B_normal.Normalize();
+
+				Pgrd const segment = B_start - A_start;
+
+				if (A_normal == B_normal && A_angle.test(segment)) {
+
+					grd const distance = segment.Size();
+
+					if (distance <= thresh)
+						if (!found_option || distance < result.distance) {
+							found_option = true;
+							result.distance = distance;
+
+							result.A = A_start;
+							result.B = B_start;
+
+#ifdef debug_chords
+							UE_LOG(LogTemp, Warning, TEXT("split: (%f,%f) to (%f,%f), distance %f"), result.A.X.n,
+								result.A.Y.n, result.B.X.n, result.B.Y.n, result.distance.n);
+#endif
+
+							result.A_edge = edge;
+							result.B_edge = edge->getNext()->getNext();
+						}
+
+				}
+			}
 
 			for (auto compare : relevants) {
 				Pgrd const B_start = compare->getStart()->getPosition();
@@ -261,9 +295,9 @@ namespace chord_splits
 				if (!A_angle.test(segment))
 					continue;
 
-				grd const distance = segment.SizeSquared();
+				grd const distance = segment.Size();
 
-				if(distance < thresh)
+				if(distance <= thresh)
 					if (!found_option || distance < result.distance) {						
 						found_option = true;
 						result.distance = distance;
@@ -456,8 +490,7 @@ namespace tri_utils
 					tri_A = (tri_A + 1) % IndexBuffer.Num();
 					frozen++;
 					if (frozen > IndexBuffer.Num()) {
-						//if (GEngine)
-						//	GEngine->AddOnScreenDebugMessage(-1, 15.0f, FColor::Yellow, TEXT("Failed to Triangulate destructible mesh!"));
+						UE_LOG(LogTemp, Warning, TEXT("TRIANGULATION FROZEN"));
 						break;
 					}
 				}
@@ -468,75 +501,9 @@ namespace tri_utils
 
 }
 
-
-
-
 //==========================================================================================================
 //================================== generation utilities ==================================================
 //==========================================================================================================
-
-struct Type_Tracker {
-	FLL<Region<Pgrd> *> Nulls;
-	FLL<Region<Pgrd> *> Rooms;
-	FLL<Region<Pgrd> *> Halls;
-	FLL<Region<Pgrd> *> Smalls;
-	bool isRoom(Region<Pgrd> const * target) {
-		for (auto room : Rooms) {
-			if (room == target) {
-				return true;
-			}
-		}
-		return false;
-	}
-	void display(Aroom_description_builder &builder) {
-		int64 p = 0;
-
-		UWorld * world = builder.GetWorld();
-		for (auto small : Smalls) {
-			cleanRegion(small);
-			for(auto border : small->getBounds())
-				Draw_Border(toFVector(border->getLoopPoints()), 72, world, color_Pnk);
-		}
-
-		for (auto room : Rooms) {
-			cleanRegion(room);
-			builder.Create_Floor_Ceiling_New(room, 0, 200);
-			builder.Create_Wall_Sections_New(room, 0, 200, Rooms);
-			for (auto border : room->getBounds())
-				Draw_Border(toFVector(border->getLoopPoints()), 80, world, color_blue);
-		}
-
-		int i = 0;
-		for (auto null : Nulls) {
-			cleanRegion(null);
-			for (auto border : null->getBounds())
-				Draw_Border(toFVector(border->getLoopPoints()), 0 + i*15, world, color_red);
-			i++;
-		}
-
-		for (auto hall : Halls) {
-			cleanRegion(hall);
-			for (auto border : hall->getBounds())
-				Draw_Border(toFVector(border->getLoopPoints()), 74, world, color_green);
-		}
-	}
-};
-
-bool Cull_Suggested(Region<Pgrd> * target, FLL<Region<Pgrd> *> &results, FLL<Region<Pgrd> *> &nulls) {
-	UE_LOG(LogTemp, Warning, TEXT("Culling\n"));
-
-	FLL<Region<Pgrd> *> rooms;
-	FLL<Region<Pgrd>*> outers;
-
-	cleanRegion(target);
-
-	chord_splits::chord_clean(target, room_min_width, rooms, outers);
-
-	nulls.absorb(outers);
-	results.absorb(rooms);
-
-	return true;
-}
 
 void mergeGroup(FLL<Region<Pgrd> *> & nulls) {
 	UE_LOG(LogTemp, Warning, TEXT("Merging Group\n"));
@@ -554,11 +521,41 @@ void mergeGroup(FLL<Region<Pgrd> *> & nulls) {
 	}
 }
 
-void cleanNulls(Type_Tracker &target, FLL<Region<Pgrd> *> &input_nulls) {
+void Cull(Region<Pgrd> * target, grd const &width, FLL<Region<Pgrd> *> &ins, FLL<Region<Pgrd> *> &outs) {
+	UE_LOG(LogTemp, Warning, TEXT("Culling\n"));
+
+	FLL<Region<Pgrd> *> _ins;
+	FLL<Region<Pgrd>*> _outs;
+
+	cleanRegion(target);
+
+	chord_splits::chord_clean(target, width, _ins, _outs);
+
+	outs.absorb(_outs);
+	ins.absorb(_ins);
+
+	mergeGroup(outs);
+}
+
+void Cull(FLL < Region<Pgrd> *> &targets, grd const &width, FLL<Region<Pgrd> *> &nulls) {
+	UE_LOG(LogTemp, Warning, TEXT("Culling\n"));
+
+	FLL<Region<Pgrd> *> results;
+
+	for (auto target : targets) {
+		Cull(target, width, results, nulls);
+	}
+
+	targets.clear();
+	targets.absorb(results);
+}
+
+FLL<Region<Pgrd> *> Type_Tracker::cleanNulls(FLL<Region<Pgrd> *> &input_nulls) {
 	UE_LOG(LogTemp, Warning, TEXT("Clean Nulls\n"));
 
-	//FLL<Region<Pgrd> *> input_nulls;
+	FLL<Region<Pgrd> *> result_nulls;
 	FLL<Region<Pgrd> *> input_halls;
+
 	//input_nulls.absorb(target.Nulls);
 	mergeGroup(input_nulls);
 
@@ -569,13 +566,13 @@ void cleanNulls(Type_Tracker &target, FLL<Region<Pgrd> *> &input_nulls) {
 
 		cleanRegion(focus);
 
-		chord_splits::chord_clean(focus, room_min_width, room_ins, room_outs);
+		chord_splits::chord_clean(focus, min_room_width, room_ins, room_outs);
 
 		for (auto null : room_ins) {
 			merge(null, null);
 		}
 
-		target.Nulls.absorb(room_ins);
+		result_nulls.absorb(room_ins);
 
 		input_halls.absorb(room_outs);
 	}
@@ -589,213 +586,147 @@ void cleanNulls(Type_Tracker &target, FLL<Region<Pgrd> *> &input_nulls) {
 
 		cleanRegion(focus);
 
-		chord_splits::chord_clean(focus, hall_min_width, hall_ins, hall_outs);
+		chord_splits::chord_clean(focus, min_hall_width, hall_ins, hall_outs);
 
-		target.Halls.absorb(hall_ins);
-		target.Smalls.absorb(hall_outs);
+		Halls.absorb(hall_ins);
+		Smalls.absorb(hall_outs);
 	}
 
-	mergeGroup(target.Halls);
-	mergeGroup(target.Smalls);
+	mergeGroup(Halls);
+	mergeGroup(Smalls);
 
-	for (auto region : target.Rooms)
+	for (auto region : Rooms)
 		cleanRegion(region);
 
-	for(auto region : target.Nulls)
+	for (auto region : Halls)
 		cleanRegion(region);
 
-	for (auto region : target.Halls)
+	for (auto region : Smalls)
 		cleanRegion(region);
 
-	for (auto region : target.Smalls)
-		cleanRegion(region);
+	return result_nulls;
 }
-
-/*
-FLL<Pgrd> choosePointsNear(Region<Pgrd> const & target, int64 count, grd offset){
-	//pick n points AWAY from the polygon
-	//get center offsets of each face
-	
-	auto bounds = getBounds(&target);
-	auto extent = bounds.getExtent();
-	auto center = bounds.getCenter();
-	
-	grd size = 2;
-
-	if (extent.X > extent.Y) {
-		size *= extent.X;
-	}
-	else {
-		size *= extent.Y;
-	}
-
-	auto segments = target.getLoopPoints();
-
-	FLL<Pgrd> seeds;
-	for (int64 ii = 0; ii < count; ii++) {
-		Pgrd seed = circularUniformPoint(size);
-		seed.X += center.X;
-		seed.Y += center.Y;
-
-		//seeds.Push(seed);
-
-		Pgrd best(0,0);
-		float best_score = FLT_MAX;
-
-		for (auto focus = segments.begin(); focus != segments.end(); ++focus) {
-			Pgrd A = *focus;
-			Pgrd B = *(focus.cyclic_next());
-			
-			Pgrd AB = B - A;
-			Pgrd AP = seed - A;
-
-			grd length = AB.SizeSquared();
-			grd dot = (AP.X * AB.X + AP.Y * AB.Y);
-
-			grd t = dot / length;
-
-			Pgrd point = AB * t + A;
-		}
-
-		seeds.append(best);
-	}
-
-	//for each edge, offset it and get the nearest point, tracking the best fit
-	return seeds;
-}
-
-struct HallwayPrototype {
-	HallwayPrototype* parent;
-	int64 parent_generation;
-
-	TArray<HallwayPrototype*> children;
-
-	TArray<_P> path;
-	HallwayPrototype(HallwayPrototype* p, int64 g) {
-		parent = p;
-		parent_generation = g;
-	}
-	//returns true if it found a child to merge with
-	bool mergeUp() {
-
-		auto grand = parent->parent;
-		/*
-		grand
-		^ parent, p_g -> NULL
-		v children -[parent]> this
-		parent (tbdeleted) {path} -prefix-clone> this
-		^ parent, p_g -> grand
-		v children -prefix-clone> this
-		this
-
-		children parents need to be re set
-		children generations need to be recalculated
-		*./
-		
-		
-		//find parent 
-		int64 p_id = grand->children.Find(parent);
-		grand->children[p_id] = this;
-
-		//these change OUR references, so they should be last
-
-		for (auto child : parent->children) {
-			child->parent = this;
-		}
-		int64 parent_lifetime = parent->children.Num();
-		for (auto child : children) {
-			child->parent_generation += parent_lifetime;
-		}
-
-		children.Insert(parent->children, 0);
-		path.Insert(parent->path, 0);
-
-		parent_generation = parent->parent_generation;
-		
-		delete parent;
-
-		parent = grand;
-
-	}
-	void retreat() {
-		if (children.Num() == 0) {
-			parent->children.Remove(this);
-			delete this;
-		}
-		else {
-			auto end = children[children.Num() - 1];
-			children.RemoveAt(children.Num() - 1);
-
-			end->mergeUp();
-		}
-	}
-
-	
-};
-/*
-void prototyper() {
-	
-	//has a set of open line paths for clipper that are expanded
-	//use open square for now, this will create artifacts at
-	
-	//create a set of lines that greedily explore from one room to another
-	//make several attempts
-	//each attempt uses a set of tree like hall ways which explore a frontier greedily
-	//after delete insignificant hallways, (consider length, objective reached, room touched)
-
-	//if a hallway -becomes- insignificant, merge its last child into it, if no children, delete
-	//Face<Pgrd>* start;
-	//Face<Pgrd>* end;
-
-	TArray<HallwayPrototype*> frontier;
-
-	//pick initial points that are on the boundary of the start
-	//pick a side that isn't to short
-	TArray<_P> start_canidates;
-
-	TArray<F_DCEL::Edge*> canidates;
-	start->getRootEdge()->listFaceLoop(canidates);
-
-	for (int64 ii = 0; ii < canidates.Num(); ii++) {
-		auto start = canidates[ii]->getStartPoint()->getPosition();
-		auto end = canidates[ii]->getEndPoint()->getPosition();
-		if ((end - start).Size() < 150) {
-			canidates.RemoveAt(ii--);
-		}
-	}
-
-	for(int64 ii = 0; ii < 3; ii++){
-		//auto target = canidates/
-	}
-
-	//pick a canidate based on... 
-	//best fitness
-	//shortest length
-	//closest to goal
-
-
-	do {
-		//pick a canidate
-
-		//suggest some segments
-
-		//choose a segment and add it
-
-		//no segments?
-		//retreat
-	} while (true);
-}*/
 
 //==========================================================================================================
 //======================================== creation ========================================================
 //==========================================================================================================
 
-void Aroom_description_builder::CreateWall(Pgrd const & wall_left, Pgrd const & wall_right, float bottom, float top) {
+UProceduralMeshComponent * Aroom_description_builder::CreateMeshComponent() {
+	UProceduralMeshComponent* component = NewObject<UProceduralMeshComponent>();
 
-	UProceduralMeshComponent* Wall_Mesh = NewObject<UProceduralMeshComponent>();
-	Wall_Mesh->AttachToComponent(root, FAttachmentTransformRules::KeepRelativeTransform);
-	Wall_Mesh->ContainsPhysicsTriMeshData(true);
-	Wall_Mesh->bUseAsyncCooking = true;
+	component->AttachToComponent(root, FAttachmentTransformRules::KeepRelativeTransform);
+	component->ContainsPhysicsTriMeshData(true);
+	component->bUseAsyncCooking = true;
+
+	return component;
+}
+
+void Aroom_description_builder::ActivateMeshComponent(UProceduralMeshComponent * component) {
+	component->ContainsPhysicsTriMeshData(true);
+
+	component->Activate();
+
+	component->RegisterComponentWithWorld(GetWorld());
+}
+
+void generateInsetPoints(Edge<Pgrd> const * target, grd const & distance, 
+	Pgrd & result_A, Pgrd & result_B) {
+
+	Pgrd const previous = target->getLast()->getStart()->getPosition();
+	Pgrd const A = target->getStart()->getPosition();
+	Pgrd const B = target->getEnd()->getPosition();
+	Pgrd const next = target->getNext()->getEnd()->getPosition();
+
+	Pgrd A_last = previous - A;
+	Pgrd A_next = B - A;
+	Pgrd B_last = A - B;
+	Pgrd B_next = next - B;
+
+	A_last.Normalize();
+	A_next.Normalize();
+	B_last.Normalize();
+	B_next.Normalize();
+	
+	{
+		result_A = A_last + A_next;
+
+		if (result_A == Pgrd(0, 0)) {
+			result_A.X = A_next.Y;
+			result_A.Y = -A_next.X;
+
+			result_A *= distance;
+		}
+		else {
+			result_A.Normalize();
+			Pgrd rot(A_next.Y, -A_next.X);
+
+			result_A *= distance / result_A.Dot(rot);
+		}
+
+		result_A += A;
+	}
+
+	{
+		result_B = B_last + B_next;
+
+		if (result_B == Pgrd(0, 0)) {
+			result_B.X = B_next.Y;
+			result_B.Y = -B_next.X;
+
+			result_B *= distance;
+		}
+		else {
+			result_B.Normalize();
+			Pgrd rot(B_next.Y, -B_next.X);
+
+			result_B *= distance / result_B.Dot(rot);
+		}
+
+		result_B += B;
+	}
+
+}
+
+FLL<Pgrd> generateInsetPoints(Face<Pgrd> * target, grd const & distance) {
+
+	FLL<Pgrd> result;
+
+	for (auto edge : target->getLoopEdges()) {
+		Pgrd const previous = edge->getLast()->getStart()->getPosition();
+		Pgrd const A = edge->getStart()->getPosition();
+		Pgrd const B = edge->getEnd()->getPosition();
+
+		Pgrd A_last = previous - A;
+		Pgrd A_next = B - A;
+
+		A_last.Normalize();
+		A_next.Normalize();
+
+		Pgrd inset = A_last + A_next;
+
+		if (inset == Pgrd(0, 0)) {
+			inset.X = A_next.Y;
+			inset.Y = -A_next.X;
+
+			inset *= distance;
+		}
+		else {
+			inset.Normalize();
+			Pgrd rot(A_next.Y, -A_next.X);
+
+			inset *= distance / inset.Dot(rot);
+		}
+
+		inset += A;
+
+		result.append(inset);
+	}
+
+	return result;
+}
+
+void Aroom_description_builder::CreateWallSegment(Edge<Pgrd> const * target, float bottom, float top,
+	UProceduralMeshComponent * component, int section_id) {
 
 	TArray<FVector> Vertices;
 	TArray<int32> Triangles;
@@ -804,32 +735,36 @@ void Aroom_description_builder::CreateWall(Pgrd const & wall_left, Pgrd const & 
 	TArray<FProcMeshTangent> Tangents;
 	TArray<FLinearColor> VertexColors;
 
-	FVector2D dir = convert(wall_left - wall_right);
+	Pgrd wall_left, wall_right;
+	generateInsetPoints(target, grd(wall_thickness / 2), wall_left, wall_right);
 
+	Pgrd dir = wall_left - wall_right;
 	dir.Normalize();
-	dir *= 30;//door radial width
 
-	Vertices.Push(FVector(convert(wall_left), bottom));
-	Vertices.Push(FVector(convert(wall_left), top));
-	Vertices.Push(FVector(convert(wall_right), bottom));
-	Vertices.Push(FVector(convert(wall_right), top));
+	Pgrd normal(dir.Y, -dir.X);
 
-	Triangles.Push(3);
-	Triangles.Push(1);
-	Triangles.Push(2);
-	Triangles.Push(2);
-	Triangles.Push(1);
+	FVector2D f_wall_left = convert(wall_left);
+	FVector2D f_wall_right = convert(wall_right);
+
+	FVector f_normal(convert(normal), 0);
+
+	Vertices.Push(FVector(f_wall_left, bottom));
+	Vertices.Push(FVector(f_wall_left, top));
+	Vertices.Push(FVector(f_wall_right, bottom));
+	Vertices.Push(FVector(f_wall_right, top));
+
 	Triangles.Push(0);
+	Triangles.Push(1);
+	Triangles.Push(2);
+	Triangles.Push(2);
+	Triangles.Push(1);
+	Triangles.Push(3);
 
-	FVector2D normal(dir.Y, -dir.X);
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
+	
+	Normals.Push(f_normal);
+	Normals.Push(f_normal);
+	Normals.Push(f_normal);
+	Normals.Push(f_normal);
 
 	UV0.Push(FVector2D(0, bottom));
 	UV0.Push(FVector2D(0, top));
@@ -849,18 +784,11 @@ void Aroom_description_builder::CreateWall(Pgrd const & wall_left, Pgrd const & 
 	VertexColors.Push(color);
 	VertexColors.Push(color);
 
-	Wall_Mesh->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, UV0, VertexColors, Tangents, true);
-	Wall_Mesh->ContainsPhysicsTriMeshData(true);
-
-	Wall_Mesh->Activate();
-
-	Wall_Mesh->RegisterComponentWithWorld(GetWorld());
+	component->CreateMeshSection_LinearColor(section_id, Vertices, Triangles, Normals, UV0, VertexColors, Tangents, true);
 }
-void Aroom_description_builder::CreateDoor(Pgrd const & wall_left, Pgrd const & wall_right, float bottom, float top) {
-	UProceduralMeshComponent* Wall_Mesh = NewObject<UProceduralMeshComponent>();
-	Wall_Mesh->AttachToComponent(root, FAttachmentTransformRules::KeepRelativeTransform);
-	Wall_Mesh->ContainsPhysicsTriMeshData(true);
-	Wall_Mesh->bUseAsyncCooking = true;
+
+void Aroom_description_builder::CreateDoorSegment(Edge<Pgrd> const * target, float bottom, float top,
+	UProceduralMeshComponent * component, int section_id) {
 
 	TArray<FVector> Vertices;
 	TArray<int32> Triangles;
@@ -869,23 +797,61 @@ void Aroom_description_builder::CreateDoor(Pgrd const & wall_left, Pgrd const & 
 	TArray<FProcMeshTangent> Tangents;
 	TArray<FLinearColor> VertexColors;
 
-	FVector2D Mid = convert((wall_left + wall_right) / 2);
-	FVector2D dir = convert(wall_left - wall_right);
+	Pgrd wall_left, wall_right;
+	generateInsetPoints(target, grd(wall_thickness / 2), wall_left, wall_right);
 
+	Pgrd dir = wall_left - wall_right;
 	dir.Normalize();
-	dir *= 30;//door radial width
-	FVector2D doorframe_left = Mid + dir;
-	FVector2D doorframe_right = Mid - dir;
 
-	Vertices.Push(FVector(convert(wall_left), bottom));
-	Vertices.Push(FVector(convert(wall_left), top));
-	Vertices.Push(FVector(doorframe_left, bottom));
-	Vertices.Push(FVector(doorframe_left, top));
-	Vertices.Push(FVector(doorframe_right, bottom));
-	Vertices.Push(FVector(doorframe_right, top));
-	Vertices.Push(FVector(convert(wall_right), bottom));
-	Vertices.Push(FVector(convert(wall_right), top));
+	Pgrd normal(dir.Y, -dir.X);
 
+	FVector2D f_wall_left = convert(wall_left);
+	FVector2D f_wall_right = convert(wall_right);
+
+	FVector f_normal(convert(normal), 0);
+
+	FVector2D f_inset_left = convert(target->getStart()->getPosition());
+	FVector2D f_inset_right = convert(target->getEnd()->getPosition());
+
+	if (top - bottom > door_height) {
+		Vertices.Push(FVector(f_wall_left, bottom));
+		Vertices.Push(FVector(f_wall_left, bottom + door_height));
+		
+		Vertices.Push(FVector(f_inset_left, bottom));
+		Vertices.Push(FVector(f_inset_left, bottom + door_height));
+
+		Vertices.Push(FVector(f_wall_right, bottom));
+		Vertices.Push(FVector(f_wall_right, bottom + door_height));
+
+		Vertices.Push(FVector(f_inset_right, bottom));
+		Vertices.Push(FVector(f_inset_right, bottom + door_height));
+
+		Vertices.Push(FVector(f_wall_left, top));
+		Vertices.Push(FVector(f_wall_right, top));
+	}
+	else {
+		Vertices.Push(FVector(convert(wall_left), bottom));
+		Vertices.Push(FVector(convert(wall_left), top));
+
+		Vertices.Push(FVector(f_inset_right, bottom));
+		Vertices.Push(FVector(f_inset_right, top));
+
+		Vertices.Push(FVector(convert(wall_right), bottom));
+		Vertices.Push(FVector(convert(wall_right), top));
+
+		Vertices.Push(FVector(f_inset_right, bottom));
+		Vertices.Push(FVector(f_inset_right, top));
+	}
+
+	//left inset
+	Triangles.Push(0);
+	Triangles.Push(1);
+	Triangles.Push(2);
+	Triangles.Push(2);
+	Triangles.Push(1);
+	Triangles.Push(3);
+
+	//right inset
 	Triangles.Push(7);
 	Triangles.Push(5);
 	Triangles.Push(6);
@@ -893,22 +859,42 @@ void Aroom_description_builder::CreateDoor(Pgrd const & wall_left, Pgrd const & 
 	Triangles.Push(5);
 	Triangles.Push(4);
 
-	Triangles.Push(3);
-	Triangles.Push(1);
-	Triangles.Push(2);
-	Triangles.Push(2);
-	Triangles.Push(1);
+	//bottom inset
 	Triangles.Push(0);
+	Triangles.Push(2);
+	Triangles.Push(4);
+	Triangles.Push(4);
+	Triangles.Push(2);
+	Triangles.Push(6);
 
-	FVector2D normal(dir.Y, -dir.X);
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
-	Normals.Push(FVector(normal, 0));
+	//top inset
+	Triangles.Push(1);
+	Triangles.Push(5);
+	Triangles.Push(3);
+	Triangles.Push(3);
+	Triangles.Push(5);
+	Triangles.Push(7);
+
+	//top panel
+	if (top - bottom > door_height) {
+		Triangles.Push(1);
+		Triangles.Push(8);
+		Triangles.Push(5);
+		Triangles.Push(5);
+		Triangles.Push(8);
+		Triangles.Push(9);
+	}
+
+	Normals.Push(f_normal);
+	Normals.Push(f_normal);
+	Normals.Push(f_normal);
+	Normals.Push(f_normal);
+	Normals.Push(f_normal);
+	Normals.Push(f_normal);
+	Normals.Push(f_normal);
+	Normals.Push(f_normal);
+	Normals.Push(f_normal);
+	Normals.Push(f_normal);
 
 	UV0.Push(FVector2D(0, bottom));
 	UV0.Push(FVector2D(0, top));
@@ -918,7 +904,11 @@ void Aroom_description_builder::CreateDoor(Pgrd const & wall_left, Pgrd const & 
 	UV0.Push(FVector2D(0, top));
 	UV0.Push(FVector2D(1, bottom));
 	UV0.Push(FVector2D(1, top));
+	UV0.Push(FVector2D(1, bottom));
+	UV0.Push(FVector2D(1, top));
 
+	Tangents.Push(FProcMeshTangent(0, 0, 1));
+	Tangents.Push(FProcMeshTangent(0, 0, 1));
 	Tangents.Push(FProcMeshTangent(0, 0, 1));
 	Tangents.Push(FProcMeshTangent(0, 0, 1));
 	Tangents.Push(FProcMeshTangent(0, 0, 1));
@@ -939,44 +929,19 @@ void Aroom_description_builder::CreateDoor(Pgrd const & wall_left, Pgrd const & 
 	VertexColors.Push(color);
 	VertexColors.Push(color);
 	VertexColors.Push(color);
+	VertexColors.Push(color);
+	VertexColors.Push(color);
 
+	component->CreateMeshSection_LinearColor(section_id, Vertices, Triangles, Normals, UV0, VertexColors, Tangents, true);
+}
+void Aroom_description_builder::CreateWindowSegment(Edge<Pgrd> const * target, float bottom, float top,
+	UProceduralMeshComponent * component, int section_id) {
 
-	const float door_height = 110;
-	if (top - bottom >= door_height) {
-		Vertices.Push(FVector(doorframe_left, bottom + door_height));
-		Vertices.Push(FVector(doorframe_right, bottom + door_height));
-
-		Triangles.Push(5);
-		Triangles.Push(3);
-		Triangles.Push(9);
-		Triangles.Push(9);
-		Triangles.Push(3);
-		Triangles.Push(8);
-
-		Normals.Push(FVector(normal, 0));
-		Normals.Push(FVector(normal, 0));
-
-		float uv_ratio = door_height / (top - bottom);
-		UV0.Push(FVector2D(0, uv_ratio));
-		UV0.Push(FVector2D(1, uv_ratio));
-
-		Tangents.Push(FProcMeshTangent(0, 0, 1));
-		Tangents.Push(FProcMeshTangent(0, 0, 1));
-
-		VertexColors.Push(color);
-		VertexColors.Push(color);
-	}
-
-	Wall_Mesh->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, UV0, VertexColors, Tangents, true);
-	Wall_Mesh->ContainsPhysicsTriMeshData(true);
-
-	Wall_Mesh->Activate();
-
-	Wall_Mesh->RegisterComponentWithWorld(GetWorld());
 }
 
-void Aroom_description_builder::Create_Floor_Ceiling_New(Region<Pgrd> * source, float bottom, float top) {
-	auto Border = toFVector(source->getBounds().last()->getLoopPoints());
+void Aroom_description_builder::CreateFloorAndCeiling(Region<Pgrd> * source, float bottom, float top) {
+	auto Border = toFVector(generateInsetPoints(source->getBounds().last(), grd(wall_thickness/2)));
+
 	Border = tri_utils::Reverse(Border);
 
 	TArray<int32> Index_Faked;
@@ -1022,7 +987,10 @@ void Aroom_description_builder::Create_Floor_Ceiling_New(Region<Pgrd> * source, 
 	Floor_Mesh->RegisterComponentWithWorld(GetWorld());
 
 }
-void Aroom_description_builder::Create_Wall_Sections_New(Region<Pgrd> * source, float bottom, float top, FLL<Region<Pgrd> *> &Rooms) {
+void Aroom_description_builder::CreateWallSections(Region<Pgrd> * source, float bottom, float top, Type_Tracker & tracker) {
+
+	float door_tolerance = door_width + wall_thickness;
+	UE_LOG(LogTemp, Warning, TEXT("allowed width: %f"), door_tolerance);
 
 	for (auto border : source->getBounds()) {
 		auto border_points = border->getLoopEdges();
@@ -1032,103 +1000,178 @@ void Aroom_description_builder::Create_Wall_Sections_New(Region<Pgrd> * source, 
 			Pgrd const A = edge->getStart()->getPosition();
 			Pgrd const B = edge->getEnd()->getPosition();
 
-			Region<Pgrd> * op = edge->getInv()->getFace()->getGroup();
+			auto segment = B - A;
+			float size = segment.Size();
 
-			if ((B - A).SizeSquared() < 40 || !Rooms.contains(op)) {
-				CreateWall(B, A, bottom, top);
+			Region<Pgrd> * op = edge->getInv()->getFace()->getGroup();
+			auto component = CreateMeshComponent();
+
+			if (edge->mark == 0) {
+				if (size <= door_tolerance || op == nullptr || op->mark == 0) {
+					CreateWallSegment(edge, bottom, top, component, 0);
+					edge->mark = 1;
+					edge->getInv()->mark = 1;
+				}
+				else {
+					UE_LOG(LogTemp, Warning, TEXT("door width: %f"), size);
+					auto mid_point = (segment / 2) + A;
+					segment.Normalize();
+					segment *= door_width / 2;
+
+					edge->subdivide(mid_point + segment);
+					edge->subdivide(mid_point - segment);
+					
+					auto middle = edge->getNext();
+					auto opposite = middle->getNext();
+
+					CreateWallSegment(edge, bottom, top, component, 0);
+					CreateDoorSegment(middle, bottom, top, component, 1);
+					CreateWallSegment(opposite, bottom, top, component, 2);
+
+					edge->mark = 1;
+					edge->getInv()->mark = 1;
+
+					middle->mark = 2;
+					middle->getInv()->mark = 2;
+
+					opposite->mark = 1;
+					opposite->getInv()->mark = 1;
+				}
+			}
+			else if (edge->mark == 1) {
+				CreateWallSegment(edge, bottom, top, component, 0);
 			}
 			else {
-				CreateDoor(B, A, bottom, top);
+				CreateDoorSegment(edge, bottom, top, component, 0);
 			}
+
+			ActivateMeshComponent(component);
 		}
 	}
 }
 
+void Aroom_description_builder::Create_System(Type_Tracker & tracker) {
+
+	tracker.system->resetEdgeMarks();
+	tracker.system->resetRegionMarks();
+
+	for (auto ext : tracker.Exteriors) {
+		cleanRegion(ext);
+	}
+
+	for (auto room : tracker.Rooms){
+		room->mark = 1;
+		cleanRegion(room);
+	}
+
+	for (auto hall : tracker.Halls) {
+		hall->mark = 1;
+		cleanRegion(hall);
+	}
+
+	for (auto ext : tracker.Exteriors) {
+		CreateWallSections(ext, 0, room_height, tracker);
+	}
+
+	for (auto room : tracker.Rooms) {
+		CreateFloorAndCeiling(room, 0, room_height);
+		CreateWallSections(room, 0, room_height, tracker);
+	}
+
+	for (auto hall : tracker.Halls) {
+		CreateFloorAndCeiling(hall, 0, room_height);
+		CreateWallSections(hall, 0, room_height, tracker);
+	}
+}
 
 //==========================================================================================================
 //======================================= generation =======================================================
 //==========================================================================================================
 
+namespace shape_generators
+{
+	FLL<Pgrd> Square_Generator(grd x, grd y, Pgrd center) {
+		FLL<Pgrd> boundary;
+		boundary.append(Pgrd(-x, -y) + center);
+		boundary.append(Pgrd(-x, y) + center);
+		boundary.append(Pgrd(x, y) + center);
+		boundary.append(Pgrd(x, -y) + center);
 
-FLL<Pgrd> Square_Generator(grd x, grd y, Pgrd center) {
-	FLL<Pgrd> boundary;
-	boundary.append(Pgrd(-x, -y) + center);
-	boundary.append(Pgrd(-x, y) + center);
-	boundary.append(Pgrd(x, y) + center);
-	boundary.append(Pgrd(x, -y) + center);
+		return boundary;
+	}
+	FLL<Pgrd> Diamond_Generator(grd x, grd y, Pgrd center) {
+		FLL<Pgrd> boundary;
+		if (x < y) {
+			grd d = y - x;
+			boundary.append(Pgrd(-x, -d) + center);
+			boundary.append(Pgrd(-x, d) + center);
+			boundary.append(Pgrd(0, y) + center);
+			boundary.append(Pgrd(x, d) + center);
+			boundary.append(Pgrd(x, -d) + center);
+			boundary.append(Pgrd(0, -y) + center);
+		}
+		else if (x > y) {
+			grd d = x - y;
+			boundary.append(Pgrd(-x, 0) + center);
+			boundary.append(Pgrd(-d, y) + center);
+			boundary.append(Pgrd(d, y) + center);
+			boundary.append(Pgrd(x, 0) + center);
+			boundary.append(Pgrd(d, -y) + center);
+			boundary.append(Pgrd(-d, -y) + center);
+		}
+		else {
+			boundary.append(Pgrd(-x, 0) + center);
+			boundary.append(Pgrd(0, x) + center);
+			boundary.append(Pgrd(x, 0) + center);
+			boundary.append(Pgrd(0, -x) + center);
+		}
 
-	return boundary;
+
+		return boundary;
+	}
+	FLL<Pgrd> Bevel_Generator(grd x, grd y, Pgrd center) {
+		grd level;
+		if (x < y) {
+			level = x / 4;
+		}
+		else {
+			level = y / 4;
+		}
+
+		FLL<Pgrd> boundary;
+
+		boundary.append(Pgrd(-x, level - y) + center);
+		boundary.append(Pgrd(-x, y - level) + center);
+		boundary.append(Pgrd(level - x, y) + center);
+		boundary.append(Pgrd(x - level, y) + center);
+		boundary.append(Pgrd(x, y - level) + center);
+		boundary.append(Pgrd(x, level - y) + center);
+		boundary.append(Pgrd(x - level, -y) + center);
+		boundary.append(Pgrd(level - x, -y) + center);
+
+		return boundary;
+	}
+	FLL<Pgrd> Rectangle_Generator(grd x, grd y, Pgrd center) {
+		grd skew = (int64)FMath::RandRange((float)0, (float)10);
+		Pgrd angle(skew / 10, (grd(10) - skew) / 10);
+		Pgrd perp((skew - 10) / 10, skew / 10);
+
+		FLL<Pgrd> boundary;
+
+		boundary.append(center - angle * x - perp * y);
+		boundary.append(center - angle * x + perp * y);
+		boundary.append(center + angle * x + perp * y);
+		boundary.append(center + angle * x - perp * y);
+
+		return boundary;
+	}
+
+	typedef FLL<Pgrd>(*generatorFunc)(grd, grd, Pgrd);
 }
-FLL<Pgrd> Diamond_Generator(grd x, grd y, Pgrd center) {
-	FLL<Pgrd> boundary;
-	if (x < y) {
-		grd d = y - x;
-		boundary.append(Pgrd(-x, -d) + center);
-		boundary.append(Pgrd(-x, d) + center);
-		boundary.append(Pgrd(0, y) + center);
-		boundary.append(Pgrd(x, d) + center);
-		boundary.append(Pgrd(x, -d) + center);
-		boundary.append(Pgrd(0, -y) + center);
-	}
-	else if (x > y) {
-		grd d = x - y;
-		boundary.append(Pgrd(-x, 0) + center);
-		boundary.append(Pgrd(-d, y) + center);
-		boundary.append(Pgrd(d, y) + center);
-		boundary.append(Pgrd(x, 0) + center);
-		boundary.append(Pgrd(d, -y) + center);
-		boundary.append(Pgrd(-d, -y) + center);
-	}
-	else {
-		boundary.append(Pgrd(-x, 0) + center);
-		boundary.append(Pgrd(0, x) + center);
-		boundary.append(Pgrd(x, 0) + center);
-		boundary.append(Pgrd(0, -x) + center);
-	}
-	
-
-	return boundary;
-}
-FLL<Pgrd> Bevel_Generator(grd x, grd y, Pgrd center) {
-	grd level;
-	if (x < y) {
-		level = x / 4;
-	}
-	else {
-		level = y / 4;
-	}
-
-	FLL<Pgrd> boundary;
-
-	boundary.append(Pgrd(-x, level - y) + center);
-	boundary.append(Pgrd(-x, y - level) + center);
-	boundary.append(Pgrd(level - x, y) + center);
-	boundary.append(Pgrd(x - level, y) + center);
-	boundary.append(Pgrd(x, y - level) + center);
-	boundary.append(Pgrd(x, level - y) + center);
-	boundary.append(Pgrd(x - level, -y) + center);
-	boundary.append(Pgrd(level - x, -y) + center);
-
-	return boundary;
-}
-FLL<Pgrd> Rectangle_Generator(grd x, grd y, Pgrd center) {
-	grd skew = (int64)FMath::RandRange((float)0, (float)10);
-	Pgrd angle(skew / 10, (grd(10) - skew) / 10);
-	Pgrd perp((skew - 10) / 10, skew / 10);
-
-	FLL<Pgrd> boundary;
-
-	boundary.append(center - angle * x - perp * y);
-	boundary.append(center - angle * x + perp * y);
-	boundary.append(center + angle * x + perp * y);
-	boundary.append(center + angle * x - perp * y);
-
-	return boundary;
-}
-
-typedef FLL<Pgrd> (*generatorFunc)(grd, grd, Pgrd);
 
 FLL<Pgrd> Pick_Generator(grd x, grd y, Pgrd center) {
+	using namespace shape_generators;
+
 	generatorFunc generator = Square_Generator;
 	float gen_choice = FMath::RandRange(0, 1);
 	if (gen_choice > .4) {
@@ -1148,32 +1191,87 @@ FLL<Pgrd> Pick_Generator(grd x, grd y, Pgrd center) {
 	return generator(x, y, center);
 }
 
-//void Generate_Building_Shape(Face<Pgrd>* Available, Type_Tracker &system_types) {
-	//generates a set of trackers for each building Region<Pgrd>
-	//these come with predefined nulls and infrastructure halls
-//}
-bool createRoomAtPoint(Type_Tracker &system_types, Pgrd const &point, int64 scale = 1, FLL<Region<Pgrd> *> * created = nullptr) {
-	UE_LOG(LogTemp, Warning, TEXT("Create Room At Point %f,%f"), point.X.n, point.Y.n);
-	FLL<Region<Pgrd> *> created_rooms;
-	FLL<Region<Pgrd> *> created_nulls;
-	FLL<Region<Pgrd> *> raw_faces;
+FLL<Region<Pgrd> *> allocateBoundaryFrom(FLL<Pgrd> const &boundary, FLL<Region<Pgrd> *> &set) {
+	FLL<Region<Pgrd> *> final_ins;
+	FLL<Region<Pgrd> *> final_outs;
 
-	Region<Pgrd> * choice = nullptr;
+	for (auto member : set) {
+		FLL<Region<Pgrd> *> created_ins;
+		FLL<Region<Pgrd> *> created_outs;
 
-	//find containing null
-	for (auto null : system_types.Nulls) {
-		if (contains(null, point).type != FaceRelationType::point_exterior) {
-			choice = null;
-			break;
+		subAllocate(member, boundary, created_outs, created_ins);
+
+		final_ins.absorb(created_ins);
+		final_outs.absorb(created_outs);
+	}
+
+	set.clear();
+
+	set.absorb(final_outs);
+
+	return final_ins;
+}
+
+FLL<Region<Pgrd> *> allocateCleanedBoundaryFrom(FLL<Pgrd> const &boundary, double min_width, FLL<Region<Pgrd> *> &set) {
+	FLL<Region<Pgrd> *> final_ins;
+	FLL<Region<Pgrd> *> final_outs;
+
+	for (auto member : set) {
+		FLL<Region<Pgrd> *> created_ins;
+		FLL<Region<Pgrd> *> created_outs;
+
+		FLL<Region<Pgrd> *> raw_ins;
+
+		subAllocate(member, boundary, created_outs, raw_ins);
+
+		for (auto in : raw_ins) {
+			Cull(in, min_width, created_ins, created_outs);
 		}
+
+		final_ins.absorb(created_ins);
+		final_outs.absorb(created_outs);
 	}
 
-	if (choice == nullptr) {
-		UE_LOG(LogTemp, Warning, TEXT("Selected point is not in a null region\n"));
-		return false;
-	}
+	set.clear();
 
-	system_types.Nulls.remove(choice);
+	set.absorb(final_outs);
+
+	return final_ins;
+}
+
+FLL<Region<Pgrd> *> Type_Tracker::createRoomFromBoundary(FLL<Pgrd> const &boundary) {
+
+	FLL<Region<Pgrd> *> final_room_set = allocateCleanedBoundaryFrom(boundary, min_room_width, Nulls);
+
+	Nulls = cleanNulls(Nulls);
+
+	Rooms.append(final_room_set);
+
+	return final_room_set;
+}
+
+FLL<Region<Pgrd> *> Type_Tracker::createHallFromBoundary(FLL<Pgrd> const &boundary) {
+
+	FLL<Region<Pgrd> *> final_hall_set = allocateCleanedBoundaryFrom(boundary, min_hall_width, Nulls);
+
+	Nulls = cleanNulls(Nulls);
+
+	Halls.append(final_hall_set);
+
+	return final_hall_set;
+}
+
+FLL<Region<Pgrd> *> Type_Tracker::createNullFromBoundary(FLL<Pgrd> const &boundary) {
+
+	FLL<Region<Pgrd> *> final_null_set = allocateBoundaryFrom(boundary, Exteriors);
+
+	Nulls.append(final_null_set);
+
+	return final_null_set;
+}
+
+FLL<Region<Pgrd> *> createRoomAtPoint(Type_Tracker &system_types, Pgrd const &point, int64 scale = 1) {
+	UE_LOG(LogTemp, Warning, TEXT("Create Room At Point %f,%f"), point.X.n, point.Y.n);
 
 	int64 area = FMath::RandRange(6, 14);
 	int64 width = FMath::RandRange(2, area / 2);
@@ -1183,53 +1281,11 @@ bool createRoomAtPoint(Type_Tracker &system_types, Pgrd const &point, int64 scal
 
 	auto bounds = Pick_Generator(width * scale, length * scale, point);
 
-
-
-	//cull to null Region<Pgrd>
-	UE_LOG(LogTemp, Warning, TEXT("CR - allocate node\n"));
-	subAllocate(choice, bounds, created_nulls, raw_faces);
-
-	//remerge rejected regions with nulls
-	for (auto face : raw_faces) {
-		Cull_Suggested(face, created_rooms, created_nulls);
-	}
-
-	//system_types.Nulls.absorb(created_nulls);
-
-	cleanNulls(system_types, created_nulls);
-
-	if (created != nullptr) {
-		created->append(created_rooms);
-	}
-
-	bool success = !created_rooms.empty();
-
-	system_types.Rooms.absorb(created_rooms);
-
-	return success;
+	return system_types.createRoomFromBoundary(bounds);
 }
-bool createRectangleAtPoint(Type_Tracker &system_types, Pgrd const &point, int64 scale = 1, FLL<Region<Pgrd> *> * created = nullptr) {
-	UE_LOG(LogTemp, Warning, TEXT("Create Room At Point %f,%f"),point.X.n, point.Y.n);
-	FLL<Region<Pgrd> *> created_rooms;
-	FLL<Region<Pgrd> *> created_nulls;
-	FLL<Region<Pgrd> *> raw_faces;
-	
-	Region<Pgrd> * choice = nullptr;
 
-	//find containing null
-	for (auto null : system_types.Nulls) {
-		if (contains(null, point).type != FaceRelationType::point_exterior) {
-			choice = null;
-			break;
-		}
-	}
-
-	if (choice == nullptr) {
-		UE_LOG(LogTemp, Warning, TEXT("Selected point is not in a null region\n"));
-		return false;
-	}
-
-	system_types.Nulls.remove(choice);
+FLL<Region<Pgrd> *> createRectangleAtPoint(Type_Tracker &system_types, Pgrd const &point, int64 scale = 1) {
+	UE_LOG(LogTemp, Warning, TEXT("Create Rectangle At Point %f,%f"),point.X.n, point.Y.n);
 
 	int64 area = FMath::RandRange(6, 14);
 	int64 width = FMath::RandRange(2, area / 2);
@@ -1237,293 +1293,294 @@ bool createRectangleAtPoint(Type_Tracker &system_types, Pgrd const &point, int64
 
 	UE_LOG(LogTemp, Warning, TEXT("size: %d %d"), width, length);
 
-	auto bounds = Rectangle_Generator(width * scale, length * scale, point);
+	auto bounds = shape_generators::Rectangle_Generator(width * scale, length * scale, point);
 
-	
-
-	//cull to null Region<Pgrd>
-	UE_LOG(LogTemp, Warning, TEXT("CR - allocate node\n"));
-	subAllocate(choice, bounds, created_nulls, raw_faces);
-
-	//remerge rejected regions with nulls
-	for (auto face : raw_faces) {
-		Cull_Suggested(face, created_rooms, created_nulls);
-	}
-
-	//system_types.Nulls.absorb(created_nulls);
-
-	cleanNulls(system_types, created_nulls);
-
-	if (created != nullptr) {
-		created->append(created_rooms);
-	}
-
-	bool success = !created_rooms.empty();
-
-	system_types.Rooms.absorb(created_rooms);
-
-	return success;
-}
-//attempts to create rooms distributed evenly across the space
-bool createDistributedRooms(Type_Tracker &system_types, const int64 attempts_per_cell = 5, int64 scale = 1, FLL<Region<Pgrd> *> *created = nullptr) {
-	//GRID METHOD
-	//from a grid, for each grid point we select a point within a tolerance radius
-	//choose a grid
-	//skew, stretch, rotation, offset
-	//offset.X = (FMath::RandRange((int64)null_bounds.Min.X / 100, (int64)null_bounds.Max.X) / 100) * 100.f;
-	//offset.Y = (FMath::RandRange((int64)null_bounds.Min.Y / 100, (int64)null_bounds.Max.Y) / 100) * 100.f;
-	
-	//offset only for now
-#define grid_width 10
-#define grid_height 10
-#define tolerance 4
-
-	Pgrd offset = boxUniformPoint(grid_width, grid_height);
-	Pgrd skew = boxUniformPoint(grid_width, grid_height);
-
-	for (int64 xx = -5; xx <= 5; xx++) {
-		for (int64 yy = -5; yy <= 5; yy++) {
-			//test a couple points until we find one in the space
-			int64 safety = attempts_per_cell;
-			Pgrd grid = Pgrd(xx * grid_width, yy * grid_height) + offset + Pgrd(skew.X*yy, skew.Y*xx);
-
-			do {
-				Pgrd choice = circularUniformPoint(tolerance) + grid;
-				choice *= 100.f;
-				//choice.toGrid(100.f);
-
-				//choice.X = (int64)(choice.X) * 100.f;
-				//choice.Y = (int64)(choice.Y) * 100.f;
-
-				if (createRoomAtPoint(system_types, choice, scale, created)) {
-					break;
-				}
-
-			}while(safety-- > 0);
-		}
-	}
-	return true;
-
-	//CHOICE METHOD
-	//_P choice = circularUniformPoint();
+	return system_types.createRoomFromBoundary(bounds);
 }
 
-bool fillNullSpace(Type_Tracker &system_types, int64 safety = 100, int64 scale = 1, FLL<Region<Pgrd> *> *created = nullptr) {
-	while (!system_types.Nulls.empty() && (safety--) > 0) {
+FLL<Pgrd> wrapSegment(Pgrd const &A, Pgrd const &B, grd const &radius) {
+	FLL<Pgrd> result;
+	Pgrd dir = B - A;
+	dir.Normalize();
+	dir *= radius;
+	Pgrd par(-dir.Y, dir.X);
 
-		auto bounds = getBounds(system_types.Nulls.last());
+	result.append(A - dir - par);
+	result.append(A - dir + par);
+	result.append(B + dir + par);
+	result.append(B + dir - par);
 
-		auto choice = boxUniformPoint(bounds);
-
-		createRoomAtPoint(system_types, choice, scale, created);
-	}
-	return true;
+	return result;
 }
 
-bool createNearRooms(Type_Tracker &system_types, Region<Pgrd> * target, int64 attempts = 10, int64 scale = 1, FLL<Region<Pgrd> *> *created = nullptr, const UWorld* ref = nullptr) {
-	
-	//auto seeds = choosePointsNear(target, 3 * attempts, 4);
+FLL<Region<Pgrd> *> createRectangleNearSegment(Type_Tracker &system_types, Pgrd const &A, Pgrd const &B, grd const &radius) {
 
-	auto bounds = getBounds(target);
+	Pgrd dir = B - A;
+	dir.Normalize();
+	Pgrd par(dir.Y, -dir.X);
 
-	attempts = attempts * 3;
-	while (attempts > 0) {
+	grd offset = FMath::RandRange(0, (B-A).Size());
+	Pgrd root = dir * offset + A;
 
-		auto seed = boxUniformPoint(4, 4);
-		if (seed.X > 0) {
-			seed.X += bounds.Max.X;
+	int64 area = FMath::RandRange(6, 14);
+	int64 width = FMath::RandRange(2, area / 2);
+	int64 length = area / width;
+
+	grd d_width = (radius / 4) * width;
+	grd d_length = (radius / 4) * length;
+
+	FLL<Pgrd> bounds;
+	if (FMath::RandBool()) {
+		bounds.append(root - (dir * d_width));
+		bounds.append(root + (dir * d_width));
+		bounds.append(root + (dir * d_width) + (par * d_length));
+		bounds.append(root - (dir * d_width) + (par * d_length));
+	}
+	else {
+		bounds.append(root - (dir * d_width) - (par * d_length));
+		bounds.append(root + (dir * d_width) - (par * d_length));
+		bounds.append(root + (dir * d_width));
+		bounds.append(root - (dir * d_width));
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Create"));
+	for(auto p : bounds)
+		UE_LOG(LogTemp, Warning, TEXT("%f,%f"), p.X.n, p.Y.n);
+
+	return system_types.createRoomFromBoundary(bounds);
+}
+
+FLL<Region<Pgrd> *> createRoomNearSegment(Type_Tracker &system_types, Pgrd const &A, Pgrd const &B, grd const &radius) {
+
+	Pgrd dir = B - A;
+	dir.Normalize();
+	Pgrd par(dir.Y, -dir.X);
+
+	grd offset = FMath::RandRange(0, (B - A).Size());
+	Pgrd root = dir * offset + A;
+
+	int64 width = FMath::RandRange(2, 8);
+
+	grd d_width = (radius / 8) * width;
+
+	FLL<Pgrd> bounds;
+	if (FMath::RandBool()) {
+		bounds.append(root - (dir * d_width));
+		bounds.append(root + (dir * d_width));
+		bounds.append(root + (dir * d_width) + (par * radius));
+		bounds.append(root - (dir * d_width) + (par * radius));
+	}
+	else {
+		bounds.append(root - (dir * d_width) - (par * radius));
+		bounds.append(root + (dir * d_width) - (par * radius));
+		bounds.append(root + (dir * d_width));
+		bounds.append(root - (dir * d_width));
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Create"));
+	for (auto p : bounds)
+		UE_LOG(LogTemp, Warning, TEXT("%f,%f"), p.X.n, p.Y.n);
+
+	return system_types.createRoomFromBoundary(bounds);
+}
+
+FLL<Region<Pgrd> *> createClosetNearSegment(Type_Tracker &system_types, Pgrd const &A, Pgrd const &B, grd const &hall_width, grd const &radius) {
+
+	Pgrd dir = B - A;
+	dir.Normalize();
+	Pgrd par(dir.Y, -dir.X);
+
+	grd offset = FMath::RandRange(0, (B - A).Size());
+	Pgrd root = dir * offset + A;
+
+	int64 width = FMath::RandRange(1, 2);
+	int64 length = FMath::RandRange(2, 4);
+
+	grd d_width = (radius / 12) * width;
+	grd d_length = (radius / 12) * length;
+
+	FLL<Pgrd> bounds;
+	//left or right
+	if (FMath::RandBool()) {
+		//near or far
+		if (FMath::RandBool()) {
+			bounds.append(root - (dir * d_width) + (par * hall_width));
+			bounds.append(root + (dir * d_width) + (par * hall_width));
+			bounds.append(root + (dir * d_width) + (par * (d_length + hall_width)));
+			bounds.append(root - (dir * d_width) + (par * (d_length + hall_width)));
 		}
 		else {
-			seed.X += bounds.Min.X;
+			bounds.append(root - (dir * d_width) + (par * (radius - d_length)));
+			bounds.append(root + (dir * d_width) + (par * (radius - d_length)));
+			bounds.append(root + (dir * d_width) + (par * radius));
+			bounds.append(root - (dir * d_width) + (par * radius));
 		}
-		if (seed.Y > 0) {
-			seed.Y += bounds.Max.Y;
+	}
+	else {
+		//near or far
+		if (FMath::RandBool()) {
+			bounds.append(root - (dir * d_width) - (par * (d_length + hall_width)));
+			bounds.append(root + (dir * d_width) - (par * (d_length + hall_width)));
+			bounds.append(root + (dir * d_width) - (par * hall_width));
+			bounds.append(root - (dir * d_width) - (par * hall_width));
 		}
 		else {
-			seed.Y += bounds.Min.Y;
-		}
-
-		if (ref) {
-			DrawDebugLine(
-				ref,
-				FVector(convert(seed) * 10, 70),
-				FVector(convert(seed) * 10, 80),
-				//FColor(FMath::RandRange(0,255), FMath::RandRange(0, 255), FMath::RandRange(0, 255)),
-				color_Pnk,
-				true,
-				-1,
-				0,
-				6
-			);
-		}
-
-		if (createRoomAtPoint(system_types, seed, scale, created)) {
-			attempts -= 3;
-		}
-		else {
-			attempts--;
+			bounds.append(root - (dir * d_width) - (par * radius));
+			bounds.append(root + (dir * d_width) - (par * radius));
+			bounds.append(root + (dir * d_width) - (par * (radius - d_length)));
+			bounds.append(root - (dir * d_width) - (par * (radius - d_length)));
 		}
 	}
 
-	//auto seeds = choosePointsNear(target, attempts);
-	//for (auto choice : seeds) {
-	//	createRoomAtPoint(system_types, choice, scale, created);
-	//}
+	UE_LOG(LogTemp, Warning, TEXT("Create"));
+	for (auto p : bounds)
+		UE_LOG(LogTemp, Warning, TEXT("%f,%f"), p.X.n, p.Y.n);
 
-	return true;
+	return system_types.createHallFromBoundary(bounds);
 }
 
-bool createLinkingHalls(Region<Pgrd> * target, FLL<Region<Pgrd> *> &nulls, FLL<Region<Pgrd> *> &created_faces) {
-	//tries to generate a set of halls linking two target faces
+//returns a type structure with halls and nulls representing 
 
-	return true;
+Type_Tracker buldingFromBlock(Type_Tracker &frame, FLL<Pgrd> &A_list, FLL<Pgrd> &B_list, UWorld * ref) {
+	
+	auto y = B_list.begin();
+	for (auto x = A_list.begin(); x != A_list.end();) {
+
+		frame.createNullFromBoundary( wrapSegment(*x, *y, grd(30)) );
+
+		++x;
+		++y;
+	}
+
+	mergeGroup(frame.Nulls);
+
+	Cull(frame.Nulls, frame.min_hall_width, frame.Exteriors);
+
+	y = B_list.begin();
+	for (auto x = A_list.begin(); x != A_list.end();) {
+
+		DrawDebugLine(
+			ref,
+			FVector(convert(*x), 15),
+			FVector(convert(*y), 15),
+			FColor(FMath::RandRange(0,255), FMath::RandRange(0, 255), FMath::RandRange(0, 255)),
+			true,
+			-1,
+			0,
+			7
+		);
+		auto halls = allocateBoundaryFrom(wrapSegment(*x, *y, grd(5)), frame.Nulls);
+		frame.Halls.absorb(halls);
+
+		++x;
+		++y;
+	}
+
+	mergeGroup(frame.Halls);
+
+	Cull(frame.Halls, frame.min_hall_width, frame.Nulls);
+	
+
+	/*y = B_list.begin();
+	for (auto x = A_list.begin(); x != A_list.end();) {
+
+		for (int ii = 0; ii < 6; ii++) {
+			createClosetNearSegment(frame, *x, *y, grd(4), grd(30));
+		}
+
+		for (int ii = 0; ii < 40; ii++) {
+			createRoomNearSegment(frame, *x, *y, grd(30));
+		}
+
+		++x;
+		++y;
+	}*/
+
+	/*Pgrd A = boxUniformPoint(140, 140) - Pgrd(70, 70);
+	Pgrd B;
+	do {
+		B = boxUniformPoint(140, 140) - Pgrd(70, 70);
+	} while ((A - B).Size() < 50);
+
+	frame.Nulls.append(frame.system->region(wrapSegment(A, B, grd(30))));
+
+	frame.createHallFromBoundary(wrapSegment(A, B, grd(7)));
+
+	for (int ii = 0; ii < 10; ii++) {
+		createClosetNearSegment(frame, A, B, grd(7), grd(30));
+	}
+
+	for (int ii = 0; ii < 20; ii++) {
+		createRoomNearSegment(frame, A, B, grd(30));
+	}*/
+
+	return frame;
 }
 
-struct building_region {
-	int64 size;
-	Region<Pgrd> * region;
-	building_region * parent;
-	building_region(int64 s, Region<Pgrd> * r) {
-		size = s;
-		region = r;
-		parent = nullptr;
-	}
-	building_region(int64 s, Region<Pgrd> * r, building_region * p) {
-		size = s;
-		region = r;
-		parent = p;
-	}
-};
-
-void create_Layout(Type_Tracker &system_types, int64 large, int64 medium, int64 small, UWorld* ref = nullptr) {
+void create_Layout(Type_Tracker &system_types, int64 large, int64 medium, UWorld* ref = nullptr) {
 	//large is 10-14
 	//med is 7-11
 	//small is 4-8
 	UE_LOG(LogTemp, Warning, TEXT("Create Layout\n"));
-	TArray<building_region*> larges;
-	TArray<building_region*> mediums;
-	TArray<building_region*> smalls;
-
-	//FLL<Region<Pgrd> *> temp_created;
-
-	//createRoomAtPoint(system_types, Pgrd(0,0), 7, &temp_created);
-
-	//for (auto room : temp_created) {
-	//	larges.Push(new building_region(0, room));
-	//}
 
 	for (int64 ii = 0; ii < large; ii++) {
 		//pick point
 		auto point = boxUniformPoint(140,140) - Pgrd(70, 70);
-		//point.toGrid(P_micro_grid);
-		FLL<Region<Pgrd> *> temp_created;
 
-		if (createRectangleAtPoint(system_types, point, 7, &temp_created))
-			UE_LOG(LogTemp, Warning, TEXT("Created %d sub-rooms \n"), temp_created.size());
+		auto temp = createRectangleAtPoint(system_types, point, 7);
 
-		//for (auto room : temp_created) {
-		//	larges.Push(new building_region(0, room));
-		//}
+		UE_LOG(LogTemp, Warning, TEXT("Created %d sub-rooms \n"), temp.size());
 	}
 
 	for (int64 ii = 0; ii < medium; ii++) {
 		//pick point
-		auto point = boxUniformPoint(140, 140, 27) - Pgrd(70, 70);
-		//point.toGrid(P_micro_grid);
-		FLL<Region<Pgrd> *> temp_created;
+		auto point = boxUniformPoint(140, 140) - Pgrd(70, 70);
 
-		if (createRoomAtPoint(system_types, point, 5, &temp_created))
-			UE_LOG(LogTemp, Warning, TEXT("Created %d sub-rooms \n"), temp_created.size());
+		auto temp = createRoomAtPoint(system_types, point, 7);
 
-		//for (auto room : temp_created) {
-		//	larges.Push(new building_region(0, room));
-		//}
+		UE_LOG(LogTemp, Warning, TEXT("Created %d sub-rooms \n"), temp.size());
 	}
-
-	/*{
-		FLL<Region<Pgrd> *> temp_created;
-		fakeCreate(system_types, Pgrd(grd(28), grd(-68) / 5), Bevel_Generator, 3, 2, &temp_created);
-		for (auto room : temp_created) {
-			larges.Push(new building_region(0, room));
-		}
-	}
-	{
-		FLL<Region<Pgrd> *> temp_created;
-		fakeCreate(system_types, Pgrd(grd(28), grd(152) / 5), Bevel_Generator, 3, 3, &temp_created);
-		for (auto room : temp_created) {
-			larges.Push(new building_region(0, room));
-		}
-	}
-	{
-		FLL<Region<Pgrd> *> temp_created;
-		fakeCreate(system_types, Pgrd(grd(28)/5, grd(-151) / 5), Square_Generator, 5, 2, &temp_created);
-		for (auto room : temp_created) {
-			larges.Push(new building_region(0, room));
-		}
-	}*/
-
-
-	//UE_LOG(LogTemp, Warning, TEXT("Larges created: %d\n"), larges.Num());
-
-	/*FLL<Face<Pgrd> *> temp_created;
-	createRoomAtPoint(system_types, _P(10 * grid_coef, -10 * grid_coef), 1, &temp_created);
-	createRoomAtPoint(system_types, _P(-5 * grid_coef, -8 * grid_coef), 1, &temp_created);
-	for (auto room : temp_created) {
-		larges.Push(new building_region(0, room));
-	}*/
-
-
-	/*for (auto large : larges) {
-		//creates some MEDIUMS
-		FLL<Region<Pgrd> *> temp_created;
-		createNearRooms(system_types, large->region, medium, 5, &temp_created, ref);
-		for (auto room : temp_created) {
-			mediums.Push(new building_region(1, room, large));
-		}
-	}
-	for (auto medium : mediums) {
-		//creates some MEDIUMS
-		FLL<Region<Pgrd> *> temp_created;
-		createNearRooms(system_types, medium->region, small, 4, &temp_created, ref);
-		for (auto room : temp_created) {
-			smalls.Push(new building_region(2, room, medium));
-		}
-	}*/
-
-	for (auto large : larges) {
-		delete large;
-	}
-	for (auto medium : mediums) {
-		delete medium;
-	}
-	for (auto small : smalls) {
-		delete small;
-	}
-}
-
-void Aroom_description_builder::Main_Generation_Loop() {
-	UE_LOG(LogTemp, Warning, TEXT("Main Generation"));
-	DCEL<Pgrd> system_new;
-	Type_Tracker system_types;
-
-	int seed = 45732;// FMath::RandRange(0, 100000);
-	FMath::RandInit(seed);
-	UE_LOG(LogTemp, Warning, TEXT("SRand Seed %d\n"), seed);
-
-	auto system_bounds = Square_Generator(100, 100, Pgrd(0,0));
-
-	Draw_Border(toFVector(system_bounds), 0, GetWorld());
-	
-	system_types.Nulls.append(system_new.region(system_bounds));
-
-	create_Layout(system_types, large_count, medium_count, 2, GetWorld());
-
-	system_types.display(*this);
 }
 
 //==========================================================================================================
 //====================================== member specific ===================================================
 //==========================================================================================================
+
+void Aroom_description_builder::Main_Generation_Loop() {
+	UE_LOG(LogTemp, Warning, TEXT("Main Generation"));
+	
+	if (use_static_seed)
+		FMath::RandInit(random_seed);
+
+	/*DCEL<Pgrd> system_new;
+	Type_Tracker system_types(&system_new);
+
+	
+
+	UE_LOG(LogTemp, Warning, TEXT("SRand Seed %d\n"), random_seed);
+
+	auto system_bounds = shape_generators::Square_Generator(100, 100, Pgrd(0, 0));
+
+	system_types.Nulls.append(system_new.region(system_bounds));
+
+	create_Layout(system_types, unalligned_count, alligned_count, GetWorld());*/
+
+	DCEL<Pgrd> * system = new DCEL<Pgrd>();
+	Type_Tracker frame(system, min_room_width, min_hall_width);
+
+	FLL<Pgrd> As;
+	FLL<Pgrd> Bs;
+	for (auto p : A_list)
+		As.append(Pgrd(p.X, p.Y));
+	for (auto p : B_list)
+		Bs.append(Pgrd(p.X, p.Y));
+
+	auto system_types = buldingFromBlock(frame, As, Bs, GetWorld());
+
+	Create_System(system_types);
+
+	delete system;
+}
 
 Aroom_description_builder::Aroom_description_builder()
 {
@@ -1538,19 +1595,20 @@ Aroom_description_builder::Aroom_description_builder()
 
 	RootComponent = root;
 
-	large_count = 4;
-	medium_count = 10;
+	use_static_seed = false;
+	random_seed = 0;
 
-	area_factor = 4;
-	area_scale = 300;
+	alligned_count = 5;
+	unalligned_count = 30;
 
-	room_factor = 2;
-	room_scale = 200;
+	wall_thickness = 10;
+	room_height = 100;
+	door_height = 80;
 
-	min_ratio = .5;
-	min_area = 300;
+	min_room_width = 18;
+	min_hall_width = 12;
 
-	min_width = 150;
+	door_width = 3;
 }
 
 // Called when the game starts or when spawned

@@ -1,4 +1,5 @@
 #include "Grid_Point.h"
+#include <cmath>
 
 Pgrd::Pgrd() {
 	X = 0;
@@ -95,23 +96,34 @@ bool Pgrd::operator!=(const Pgrd &test) const {
 grd Pgrd::SizeSquared() const {
 	return X * X + Y * Y;
 }
-float Pgrd::Size() const {
-	//return FMath::Sqrt(SizeSquared()); //MARK FLOAT USED
-	return 0;
+double Pgrd::Size() const {
+	return sqrt(SizeSquared().n);
 }
 
-//void Normalize() {
-//	const grd sizeSq = SizeSquared();
-//	const grd sizeSq = SizeSquared();
-//	if (sizeSq == 0) {
-//		return;
-//	}
-//	X /= size;
-//	Y /= size;
-//}
+void Pgrd::Normalize() {
+	const double size = Size();
+	if (size == 0) {
+		return;
+	}
+
+	X /= size;
+	Y /= size;
+}
 
 grd Pgrd::Dot(const Pgrd &b) const {
 	return X * b.X + Y * b.Y;
+}
+
+Pgrd Pgrd::projectToSegment(Pgrd const & A, Pgrd const & B) const
+{
+	Pgrd const segment = B - A;
+	Pgrd const perp(-segment.Y, segment.X);
+
+	Pgrd result;
+
+	Pgrd::getIntersect(A, B, *this, *this + perp, result);
+
+	return result;
 }
 
 point_near_segment_state Pgrd::getState(const Pgrd &start, const Pgrd &end) const {

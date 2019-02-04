@@ -34,6 +34,8 @@ class Point {
 	// This can only be created through DCEL system functions
 	Point(DCEL<_P> * uni){
 		universe = uni;
+
+		mark = 0;
 	};
 	Point(Point<_P> &&) = delete;
 	Point(Point<_P> const &) = delete;
@@ -42,6 +44,8 @@ class Point {
 
 	}
 public:
+	int mark;
+
 	void setPosition(_P p) {
 		position = p;
 	};
@@ -103,6 +107,8 @@ class Edge {
 	//this can only be created through DCEL system functions
 	Edge(DCEL<_P> * uni) {
 		universe = uni;
+
+		mark = 0;
 	}
 	Edge(Edge<_P> &&) = delete;
 	Edge(Edge<_P> const &) = delete;
@@ -111,6 +117,8 @@ class Edge {
 
 	}
 public:
+	int mark;
+
 	//%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	//         Traversal Methods
 
@@ -486,9 +494,13 @@ class Face {
 	Face(DCEL<_P> * uni) {
 		universe = uni;
 		group = nullptr;
+
+		mark = 0;
 	}
 	Face(DCEL<_P> * uni, Region<_P> * grp) {
 		universe = uni;
+
+		mark = 0;
 	}
 	Face(Face<_P> &&) = delete;
 	Face(Face<_P> const &) = delete;
@@ -509,6 +521,8 @@ class Face {
 	}
 
 public:
+	int mark;
+
 	//%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	//         Traversal Methods
 
@@ -733,6 +747,8 @@ class Region {
 
 	Region(DCEL<_P> * uni) {
 		universe = uni;
+
+		mark = 0;
 	}
 	~Region() {
 
@@ -743,6 +759,8 @@ class Region {
 	Region(Region<_P> const &) = delete;
 
 public:
+	int mark;
+
 	FLL<Face<_P> *> const & getBounds() {
 		return Boundaries;
 	}
@@ -1040,5 +1058,25 @@ public:
 		regions.remove(target);
 
 		delete target;
+	}
+
+	void resetPointMarks() {
+		for (auto point : points)
+			point->mark = 0;
+	}
+
+	void resetEdgeMarks() {
+		for (auto edge : edges)
+			edge->mark = 0;
+	}
+
+	void resetFaceMarks() {
+		for (auto face : faces)
+			face->mark = 0;
+	}
+
+	void resetRegionMarks() {
+		for (auto region : regions)
+			region->mark = 0;
 	}
 };

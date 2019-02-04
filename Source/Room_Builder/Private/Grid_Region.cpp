@@ -1,7 +1,7 @@
 #include "Grid_Region.h"
 #include <cmath>
 
-#define debug_suballocate
+//#define debug_suballocate
 //#define debug_merge
 //#define debug_clean
 
@@ -591,11 +591,11 @@ void determineInteriors(Region<Pgrd> * target, FLL<interact *> & details,
 
 
 		if (from->type == FaceRelationType::point_on_boundary) {
-			auto target = from->mark->getFace();
+			auto face = from->mark->getFace();
 
-			exteriors.remove(target);
+			exteriors.remove(face);
 
-			interiors.push(target);
+			interiors.push(face);
 		}
 	}
 }

@@ -44,19 +44,15 @@ struct Pgrd {
 
 	bool operator==(const Pgrd &test) const;
 	bool operator!=(const Pgrd &test) const;
+
 	grd SizeSquared() const;
-	float Size() const;
-	//void Normalize() {
-	//	const grd sizeSq = SizeSquared();
-	//	const grd sizeSq = SizeSquared();
-	//	if (sizeSq == 0) {
-	//		return;
-	//	}
-	//	X /= size;
-	//	Y /= size;
-	//}
+	double Size() const;
+
+	void Normalize();
 
 	grd Dot(const Pgrd &b) const;
+
+	Pgrd projectToSegment(Pgrd const &A, Pgrd const &B) const;
 
 	point_near_segment_state getState(const Pgrd &start, const Pgrd &end) const;
 
@@ -69,7 +65,6 @@ struct Pgrd {
 	static bool getIntersect(const Pgrd &A_S, const Pgrd &A_E, const Pgrd &B_S, const Pgrd &B_E, Pgrd &Result);
 
 	static grd area(FLL<Pgrd> const &boundary);
-
 };
 
 struct PBox {
