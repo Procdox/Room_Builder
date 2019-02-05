@@ -1,6 +1,6 @@
 #pragma once
 
-#define grid_epsilon .00001
+#define grid_epsilon .000001
 
 class grd {
 	

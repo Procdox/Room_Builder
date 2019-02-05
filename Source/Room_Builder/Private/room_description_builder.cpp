@@ -220,7 +220,7 @@ namespace chord_splits
 
 					grd const distance = segment.Size();
 
-					if (distance <= thresh)
+					if (distance < thresh)
 						if (!found_option || distance < result.distance) {
 							found_option = true;
 							result.distance = distance;
@@ -297,7 +297,7 @@ namespace chord_splits
 
 				grd const distance = segment.Size();
 
-				if(distance <= thresh)
+				if(distance < thresh)
 					if (!found_option || distance < result.distance) {						
 						found_option = true;
 						result.distance = distance;
@@ -537,13 +537,13 @@ void Cull(Region<Pgrd> * target, grd const &width, FLL<Region<Pgrd> *> &ins, FLL
 	mergeGroup(outs);
 }
 
-void Cull(FLL < Region<Pgrd> *> &targets, grd const &width, FLL<Region<Pgrd> *> &nulls) {
+void Cull(FLL < Region<Pgrd> *> &targets, grd const &width, FLL<Region<Pgrd> *> &outs) {
 	UE_LOG(LogTemp, Warning, TEXT("Culling\n"));
 
 	FLL<Region<Pgrd> *> results;
 
 	for (auto target : targets) {
-		Cull(target, width, results, nulls);
+		Cull(target, width, results, outs);
 	}
 
 	targets.clear();
@@ -1446,7 +1446,7 @@ Type_Tracker buldingFromBlock(Type_Tracker &frame, FLL<Pgrd> &A_list, FLL<Pgrd> 
 	auto y = B_list.begin();
 	for (auto x = A_list.begin(); x != A_list.end();) {
 
-		frame.createNullFromBoundary( wrapSegment(*x, *y, grd(30)) );
+		frame.createNullFromBoundary( wrapSegment(*x, *y, grd(frame.min_hall_width * 3)) );
 
 		++x;
 		++y;
@@ -1454,7 +1454,9 @@ Type_Tracker buldingFromBlock(Type_Tracker &frame, FLL<Pgrd> &A_list, FLL<Pgrd> 
 
 	mergeGroup(frame.Nulls);
 
-	Cull(frame.Nulls, frame.min_hall_width, frame.Exteriors);
+	Cull(frame.Nulls, grd(frame.min_hall_width * 6), frame.Exteriors);
+
+	mergeGroup(frame.Exteriors);
 
 	y = B_list.begin();
 	for (auto x = A_list.begin(); x != A_list.end();) {
@@ -1469,7 +1471,7 @@ Type_Tracker buldingFromBlock(Type_Tracker &frame, FLL<Pgrd> &A_list, FLL<Pgrd> 
 			0,
 			7
 		);
-		auto halls = allocateBoundaryFrom(wrapSegment(*x, *y, grd(5)), frame.Nulls);
+		auto halls = allocateBoundaryFrom(wrapSegment(*x, *y, grd(frame.min_hall_width / 2)), frame.Nulls);
 		frame.Halls.absorb(halls);
 
 		++x;
@@ -1478,23 +1480,22 @@ Type_Tracker buldingFromBlock(Type_Tracker &frame, FLL<Pgrd> &A_list, FLL<Pgrd> 
 
 	mergeGroup(frame.Halls);
 
-	Cull(frame.Halls, frame.min_hall_width, frame.Nulls);
-	
+	Cull(frame.Halls, grd(frame.min_hall_width), frame.Nulls);
 
-	/*y = B_list.begin();
+	y = B_list.begin();
 	for (auto x = A_list.begin(); x != A_list.end();) {
 
-		for (int ii = 0; ii < 6; ii++) {
-			createClosetNearSegment(frame, *x, *y, grd(4), grd(30));
+		for (int ii = 0; ii < 0; ii++) {
+			createClosetNearSegment(frame, *x, *y, grd(frame.min_hall_width / 2), grd(frame.min_hall_width * 3));
 		}
 
-		for (int ii = 0; ii < 40; ii++) {
-			createRoomNearSegment(frame, *x, *y, grd(30));
+		for (int ii = 0; ii < 3; ii++) {
+			createRoomNearSegment(frame, *x, *y, grd(frame.min_hall_width * 3));
 		}
 
 		++x;
 		++y;
-	}*/
+	}
 
 	/*Pgrd A = boxUniformPoint(140, 140) - Pgrd(70, 70);
 	Pgrd B;

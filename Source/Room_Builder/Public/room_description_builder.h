@@ -20,6 +20,7 @@ struct Type_Tracker {
 	FLL<Region<Pgrd> *> Rooms;
 	FLL<Region<Pgrd> *> Halls;
 	FLL<Region<Pgrd> *> Smalls;
+
 	bool isRoom(Region<Pgrd> const * target) {
 		for (auto room : Rooms) {
 			if (room == target) {
@@ -66,22 +67,22 @@ class ROOM_BUILDER_API Aroom_description_builder : public AActor
 	int32 alligned_count;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-	float wall_thickness;
+	double wall_thickness;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-	float room_height;
+	double room_height;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-	float door_height;
+	double door_height;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-	float door_width;
+	double door_width;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-	float min_room_width;
+	double min_room_width;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-	float min_hall_width;
+	double min_hall_width;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
 	TArray<FVector2D> A_list;
