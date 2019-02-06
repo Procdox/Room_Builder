@@ -46,7 +46,7 @@ struct Pgrd {
 	bool operator!=(const Pgrd &test) const;
 
 	grd SizeSquared() const;
-	double Size() const;
+	grd Size() const;
 
 	void Normalize();
 

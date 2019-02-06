@@ -48,4 +48,6 @@ public:
 	bool operator>=(const grd &test) const;
 	bool operator<=(const double &test) const;
 	bool operator<=(const grd &test) const;
+
+	grd sqrt() const;
 };

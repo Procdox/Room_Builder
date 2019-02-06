@@ -170,14 +170,11 @@ namespace chord_splits
 		}
 	};
 
-//#define debug_chords
+#define debug_chords
 
 	void chord_clean(Region<Pgrd> * target, grd const & thresh, FLL<Region<Pgrd> *> & ins, FLL<Region<Pgrd> *> & outs) {
 		//if no pair is small enough to split, add to ins and return
-		split_canidate result;
-		grd diameter = thresh+1;
-		bool found_option = false;
-
+		
 		FLL<Edge<Pgrd> *> relevants;
 
 		for (auto border : target->getBounds()) {
@@ -187,8 +184,55 @@ namespace chord_splits
 		UE_LOG(LogTemp, Warning, TEXT("cleaning..."));
 #endif
 
+		{
+			grd diameter = thresh + 1;
+			grd min_offset, max_offset;
 
-		grd min_offset, max_offset;
+			//check region size
+			for (auto edge : relevants) {
+
+				Pgrd const A_start = edge->getEnd()->getPosition();
+				Pgrd const A_before = edge->getStart()->getPosition();
+				Pgrd const A = A_start - A_before;
+
+				min_offset = linear_offset(A, A_start);
+				max_offset = min_offset;
+
+				for (auto compare : relevants) {
+					Pgrd const B_start = compare->getStart()->getPosition();
+
+					grd const raw = linear_offset(A, B_start);
+
+					if (min_offset > raw)
+						min_offset = raw;
+
+					if (max_offset < raw)
+						max_offset = raw;
+				}
+
+				grd const t = max_offset - min_offset;
+				grd const offset = t * t * (A.X * A.X + A.Y * A.Y);
+#ifdef debug_chords
+				UE_LOG(LogTemp, Warning, TEXT("offset: %f"), offset.sqrt().n);
+#endif
+				if (offset.sqrt() < diameter)
+					diameter = offset.sqrt();
+			}
+#ifdef debug_chords
+			UE_LOG(LogTemp, Warning, TEXT("diameter: %f"), diameter.n);
+#endif
+			if (diameter <= thresh) {
+#ifdef debug_chords
+				UE_LOG(LogTemp, Warning, TEXT("removed... \n"));
+#endif
+				outs.push(target);
+
+				return;
+			}
+		}
+
+		split_canidate result;
+		bool found_option = false;
 
 		for (auto edge : relevants) {
 
@@ -198,10 +242,22 @@ namespace chord_splits
 
 			Pgrd const A = A_start - A_before;
 
-			bvs const A_angle(A_after - A_start, A_before - A_start);
+			Pgrd const A_last = A_before - A_start;
+			Pgrd const A_next = A_after - A_start;
 
-			min_offset = linear_offset(A, A_start);
-			max_offset = min_offset;
+			//only clip concave corners
+			{
+				Pgrd const inner(A_last.Y, -A_last.X);
+				if (inner.Dot(A_next) <= 0) {
+					UE_LOG(LogTemp, Warning, TEXT("convex"));
+					continue;
+				}
+				else {
+					UE_LOG(LogTemp, Warning, TEXT("concave"));
+				}
+			}
+
+			bvs const A_angle(A_next, A_last);
 
 			//ear clip attempt
 			{
@@ -229,7 +285,7 @@ namespace chord_splits
 							result.B = B_start;
 
 #ifdef debug_chords
-							UE_LOG(LogTemp, Warning, TEXT("split: (%f,%f) to (%f,%f), distance %f"), result.A.X.n,
+							UE_LOG(LogTemp, Warning, TEXT("clip: (%f,%f) to (%f,%f), distance %f"), result.A.X.n,
 								result.A.Y.n, result.B.X.n, result.B.Y.n, result.distance.n);
 #endif
 
@@ -242,14 +298,6 @@ namespace chord_splits
 
 			for (auto compare : relevants) {
 				Pgrd const B_start = compare->getStart()->getPosition();
-
-				grd const raw = linear_offset(A, B_start);
-
-				if (min_offset > raw)
-					min_offset = raw;
-
-				if (max_offset < raw)
-					max_offset = raw;
 
 				if (compare == edge || compare == edge->getNext()) {
 					continue;
@@ -314,22 +362,9 @@ namespace chord_splits
 						result.B_edge = compare;
 					}
 			}
-
-			grd const t = max_offset - min_offset;
-			grd const offset = t * t * (A.X * A.X + A.Y * A.Y);
-#ifdef debug_chords
-			UE_LOG(LogTemp, Warning, TEXT("offset: %f"), offset.n);
-#endif
-			if (offset < diameter)
-				diameter = offset;
 		}
-		if (diameter <= thresh) {
-#ifdef debug_chords
-			UE_LOG(LogTemp, Warning, TEXT("removed... \n"));
-#endif
-			outs.push(target);
-		}
-		else if (found_option) {
+		
+		if (found_option) {
 			if (result.B == result.B_edge->getStart()->getPosition()) {
 				result.B_edge = result.B_edge->getLast();
 			}else if (result.B != result.B_edge->getEnd()->getPosition()) {
@@ -1001,7 +1036,7 @@ void Aroom_description_builder::CreateWallSections(Region<Pgrd> * source, float 
 			Pgrd const B = edge->getEnd()->getPosition();
 
 			auto segment = B - A;
-			float size = segment.Size();
+			grd size = segment.Size();
 
 			Region<Pgrd> * op = edge->getInv()->getFace()->getGroup();
 			auto component = CreateMeshComponent();
@@ -1013,7 +1048,7 @@ void Aroom_description_builder::CreateWallSections(Region<Pgrd> * source, float 
 					edge->getInv()->mark = 1;
 				}
 				else {
-					UE_LOG(LogTemp, Warning, TEXT("door width: %f"), size);
+					UE_LOG(LogTemp, Warning, TEXT("door width: %f"), size.n);
 					auto mid_point = (segment / 2) + A;
 					segment.Normalize();
 					segment *= door_width / 2;
@@ -1319,7 +1354,7 @@ FLL<Region<Pgrd> *> createRectangleNearSegment(Type_Tracker &system_types, Pgrd 
 	dir.Normalize();
 	Pgrd par(dir.Y, -dir.X);
 
-	grd offset = FMath::RandRange(0, (B-A).Size());
+	grd offset = FMath::RandRange(0.f, (B-A).Size().n);
 	Pgrd root = dir * offset + A;
 
 	int64 area = FMath::RandRange(6, 14);
@@ -1356,7 +1391,7 @@ FLL<Region<Pgrd> *> createRoomNearSegment(Type_Tracker &system_types, Pgrd const
 	dir.Normalize();
 	Pgrd par(dir.Y, -dir.X);
 
-	grd offset = FMath::RandRange(0, (B - A).Size());
+	grd offset = FMath::RandRange(0.f, (B - A).Size().n);
 	Pgrd root = dir * offset + A;
 
 	int64 width = FMath::RandRange(2, 8);
@@ -1390,7 +1425,7 @@ FLL<Region<Pgrd> *> createClosetNearSegment(Type_Tracker &system_types, Pgrd con
 	dir.Normalize();
 	Pgrd par(dir.Y, -dir.X);
 
-	grd offset = FMath::RandRange(0, (B - A).Size());
+	grd offset = FMath::RandRange(0.f, (B - A).Size().n);
 	Pgrd root = dir * offset + A;
 
 	int64 width = FMath::RandRange(1, 2);
@@ -1441,12 +1476,14 @@ FLL<Region<Pgrd> *> createClosetNearSegment(Type_Tracker &system_types, Pgrd con
 
 //returns a type structure with halls and nulls representing 
 
-Type_Tracker buldingFromBlock(Type_Tracker &frame, FLL<Pgrd> &A_list, FLL<Pgrd> &B_list, UWorld * ref) {
+void Aroom_description_builder::buldingFromBlock(Type_Tracker &frame, FLL<Pgrd> &A_list, FLL<Pgrd> &B_list) {
 	
+	UE_LOG(LogTemp, Warning, TEXT("Building Generation\n\n"));
+
 	auto y = B_list.begin();
 	for (auto x = A_list.begin(); x != A_list.end();) {
 
-		frame.createNullFromBoundary( wrapSegment(*x, *y, grd(frame.min_hall_width * 3)) );
+		frame.createNullFromBoundary( wrapSegment(*x, *y, grd(min_hall_width * 3)) );
 
 		++x;
 		++y;
@@ -1454,15 +1491,17 @@ Type_Tracker buldingFromBlock(Type_Tracker &frame, FLL<Pgrd> &A_list, FLL<Pgrd> 
 
 	mergeGroup(frame.Nulls);
 
-	Cull(frame.Nulls, grd(frame.min_hall_width * 6), frame.Exteriors);
+	Cull(frame.Nulls, grd(min_hall_width * 6), frame.Exteriors);
 
 	mergeGroup(frame.Exteriors);
+
+	UE_LOG(LogTemp, Warning, TEXT("Hall Generation\n\n\n"));
 
 	y = B_list.begin();
 	for (auto x = A_list.begin(); x != A_list.end();) {
 
 		DrawDebugLine(
-			ref,
+			GetWorld(),
 			FVector(convert(*x), 15),
 			FVector(convert(*y), 15),
 			FColor(FMath::RandRange(0,255), FMath::RandRange(0, 255), FMath::RandRange(0, 255)),
@@ -1471,7 +1510,7 @@ Type_Tracker buldingFromBlock(Type_Tracker &frame, FLL<Pgrd> &A_list, FLL<Pgrd> 
 			0,
 			7
 		);
-		auto halls = allocateBoundaryFrom(wrapSegment(*x, *y, grd(frame.min_hall_width / 2)), frame.Nulls);
+		auto halls = allocateBoundaryFrom(wrapSegment(*x, *y, grd(min_hall_width / 2)), frame.Nulls);
 		frame.Halls.absorb(halls);
 
 		++x;
@@ -1480,16 +1519,22 @@ Type_Tracker buldingFromBlock(Type_Tracker &frame, FLL<Pgrd> &A_list, FLL<Pgrd> 
 
 	mergeGroup(frame.Halls);
 
-	Cull(frame.Halls, grd(frame.min_hall_width), frame.Nulls);
+	Cull(frame.Halls, grd(min_hall_width), frame.Nulls);
+
+	UE_LOG(LogTemp, Warning, TEXT("Stuff Generation\n\n\n"));
 
 	y = B_list.begin();
 	for (auto x = A_list.begin(); x != A_list.end();) {
 
-		for (int ii = 0; ii < 0; ii++) {
+		UE_LOG(LogTemp, Warning, TEXT("Closet Generation\n\n\n"));
+
+		for (int ii = 0; ii < closets_per_segment; ii++) {
 			createClosetNearSegment(frame, *x, *y, grd(frame.min_hall_width / 2), grd(frame.min_hall_width * 3));
 		}
 
-		for (int ii = 0; ii < 3; ii++) {
+		UE_LOG(LogTemp, Warning, TEXT("Room Generation\n\n\n"));
+
+		for (int ii = 0; ii < rooms_per_segment; ii++) {
 			createRoomNearSegment(frame, *x, *y, grd(frame.min_hall_width * 3));
 		}
 
@@ -1514,8 +1559,6 @@ Type_Tracker buldingFromBlock(Type_Tracker &frame, FLL<Pgrd> &A_list, FLL<Pgrd> 
 	for (int ii = 0; ii < 20; ii++) {
 		createRoomNearSegment(frame, A, B, grd(30));
 	}*/
-
-	return frame;
 }
 
 void create_Layout(Type_Tracker &system_types, int64 large, int64 medium, UWorld* ref = nullptr) {
@@ -1576,9 +1619,9 @@ void Aroom_description_builder::Main_Generation_Loop() {
 	for (auto p : B_list)
 		Bs.append(Pgrd(p.X, p.Y));
 
-	auto system_types = buldingFromBlock(frame, As, Bs, GetWorld());
+	buldingFromBlock(frame, As, Bs);
 
-	Create_System(system_types);
+	Create_System(frame);
 
 	delete system;
 }
@@ -1599,8 +1642,8 @@ Aroom_description_builder::Aroom_description_builder()
 	use_static_seed = false;
 	random_seed = 0;
 
-	alligned_count = 5;
-	unalligned_count = 30;
+	rooms_per_segment = 10;
+	closets_per_segment = 6;
 
 	wall_thickness = 10;
 	room_height = 100;

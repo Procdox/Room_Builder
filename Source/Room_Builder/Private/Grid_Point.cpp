@@ -1,5 +1,4 @@
 #include "Grid_Point.h"
-#include <cmath>
 
 Pgrd::Pgrd() {
 	X = 0;
@@ -96,12 +95,12 @@ bool Pgrd::operator!=(const Pgrd &test) const {
 grd Pgrd::SizeSquared() const {
 	return X * X + Y * Y;
 }
-double Pgrd::Size() const {
-	return sqrt(SizeSquared().n);
+grd Pgrd::Size() const {
+	return SizeSquared().sqrt();
 }
 
 void Pgrd::Normalize() {
-	const double size = Size();
+	grd const size = Size();
 	if (size == 0) {
 		return;
 	}

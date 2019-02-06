@@ -61,10 +61,10 @@ class ROOM_BUILDER_API Aroom_description_builder : public AActor
 	USceneComponent* root;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-	int32 unalligned_count;
+	int32 rooms_per_segment;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-	int32 alligned_count;
+	int32 closets_per_segment;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
 	double wall_thickness;
@@ -106,6 +106,8 @@ public:
 	void CreateWallSections(Region<Pgrd> * source, float bottom, float top, Type_Tracker & tracker);
 
 	void Create_System(Type_Tracker & tracker);
+
+	void buldingFromBlock(Type_Tracker &frame, FLL<Pgrd> &A_list, FLL<Pgrd> &B_list);
 
 	void Main_Generation_Loop();
 

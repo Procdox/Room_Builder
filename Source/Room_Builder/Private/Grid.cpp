@@ -1,4 +1,5 @@
 #include "Grid.h"
+#include <cmath>
 
 grd::grd()
 {
@@ -194,4 +195,9 @@ bool grd::operator<=(const double & test) const
 bool grd::operator<=(const grd & test) const
 {
 	return n - grid_epsilon < test.n;
+}
+
+grd grd::sqrt() const
+{
+	return grd(_CMATH_::sqrt(n));
 }
