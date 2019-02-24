@@ -146,6 +146,29 @@ FaceRelation contains(Region<Pgrd> * target, Pgrd const & test_point) {
 	return FaceRelation(FaceRelationType::point_interior, nullptr);
 }
 
+void cleanFace(Face<Pgrd> * target) {
+	auto edge = target->getRoot();
+	auto next = edge->getNext();
+	auto B = next->getEnd()->getPosition() - next->getStart()->getPosition();
+	auto A = edge->getEnd()->getPosition() - edge->getStart()->getPosition();
+	A.Normalize();
+	B.Normalize();
+
+	do {
+		if(edge->getInv()->getLast()->getInv() == next)
+			if (A.Dot(B) == 1)
+				edge->contract();
+
+		edge = next;
+		next = edge->getNext();
+
+		A = B;
+		B = next->getEnd()->getPosition() - next->getStart()->getPosition();
+		B.Normalize();
+	} while (edge != target->getRoot());
+}
+
+//TODO: self cleaning merge
 bool merge(Region<Pgrd> * a, Region<Pgrd> * b) {
 	//since both areas are continuous, its trivial that only one or no boundary pair can touch
 
@@ -208,8 +231,10 @@ bool merge(Region<Pgrd> * a, Region<Pgrd> * b) {
 		for (auto face : t)
 			a->append(face);
 
-		for (auto face : tba)
+		for (auto face : tba) {
+			cleanFace(face);
 			a->append(face);
+		}
 
 #ifdef debug_merge
 		UE_LOG(LogTemp, Warning, TEXT("result"));

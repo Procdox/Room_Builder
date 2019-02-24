@@ -46,6 +46,8 @@ struct FaceRelation {
 
 FaceRelation const getPointRelation(Face<Pgrd> &rel, Pgrd const &test_point);
 
+FaceRelationType const getPointRelation(FLL<Pgrd> const & rel, Pgrd const &test_point);
+
 bool merge(Region<Pgrd> * a, Region<Pgrd> * b);
 
 void determineInteriors(Region<Pgrd> *, FLL<interact *> &, FLL<Face<Pgrd> *> &,

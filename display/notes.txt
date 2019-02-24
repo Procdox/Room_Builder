@@ -1,24 +1,11 @@
 broken seeds:
-45732 
-- 3 larges / 1 mediums
-    null has sliver that is failed to cut 
-    SOLVED, cuts were ignoring to much
-- 3 larges / 4 mediums
-    a 0 width purple section occurs
-    SOLVED, discovered pre-computed angle check (BVS) was referencing A for both perp angles in constructor
-- 3 larges / 4 mediums
-    result of previous fix
-    null face has its own region, despite belonging to the existing region
-    seems to be caused by an errorneous cut across an exterior region, causing the two portions of the newer null face to become divided
-    SOLVED, parameters to betweenAngles was swapped for end bound cuts
-- 3 larges / 45 mediums
-    infinite recursion upon cutting a strand of a room directly along an edge
-    SOLVED, == and != or RTO-EX were referencing the local n instead of target.n
-- 7 large / 2 mediums
-    null face has its own region, despite belonging to the existing region
-    SOLVED, clean cuts didnt check against a angles after determining intersect
-- 7 large / 24 mediums
-    nullptr reference in suballocate, seems to be caused by a jump from exterior to interior
-    we have an overflow occuring in markRegion - findIntersects
-    SOLVED, RTP-EX division was incorrectly multiplying by gcd instead of dividing
-- 7 large / 3 mediums
+40419 - 2 rooms - 0 closets
+    broken triangulation
+
+todo:
+    cull cut types:
+        projected (original)
+        trailing extended
+        leading extended
+    remove next->next cuts
+    

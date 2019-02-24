@@ -153,13 +153,14 @@ point_near_segment_state Pgrd::getState(const Pgrd &start, const Pgrd &end) cons
 }
 
 bool Pgrd::areParrallel(const Pgrd &A_S, const Pgrd &A_E, const Pgrd &B_S, const Pgrd &B_E) {
-	const Pgrd A = A_E - A_S;
-	const Pgrd A_R = A + B_S;
+	const auto A = A_E - A_S;
+	const auto B = B_E - B_S;
 
-	//if A lies on B or after it they are parrallel
-	auto state = A_R.getState(B_S, B_E);
-	return (state == on_segment || state == on_end || state == after_segment);
+	const auto D = A_S - B_S;
 
+	const auto denom = A.X * B.Y - A.Y * B.X;
+
+	return denom == 0;
 }
 
 bool Pgrd::isOnSegment(const Pgrd &test, const Pgrd &a, const Pgrd &b) {
@@ -211,8 +212,6 @@ grd Pgrd::area(FLL<Pgrd> const & boundary) {
 
 grd linear_offset(Pgrd const &A, Pgrd const &B) {
 
-	grd denom = (A.X * A.X + A.Y * A.Y);
-	grd top = (A.Y * B.Y + A.X * B.X);
-
-	return top / denom;
+	grd const top = (A.Y * B.X) - (A.X * B.Y);
+	return top / A.Size();
 }

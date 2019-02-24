@@ -9,6 +9,48 @@
 #include "room_description_builder.generated.h"
 
 //Used to track regions within a DCEL and categorize them
+
+struct Region_Suggestion {
+	FLL<Pgrd> centroids;
+	FLL<FLL<Pgrd> *> boundaries;
+
+	bool contains(Pgrd const &test);
+};
+
+USTRUCT()
+struct FBuild_Line {
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnyWhere)
+	FVector2D start;
+	UPROPERTY(EditAnyWhere)
+	FVector2D end;
+
+	UPROPERTY(EditAnyWhere)
+	bool start_row;
+	UPROPERTY(EditAnyWhere)
+	bool end_row;
+};
+
+struct rigid_line {
+	Pgrd start;
+	Pgrd end;
+
+	bool start_row;
+	bool end_row;
+
+	rigid_line() {
+
+	}
+	rigid_line(FBuild_Line const &ref) {
+		start = Pgrd(ref.start.X, ref.start.Y);
+		end = Pgrd(ref.end.X, ref.end.Y);
+
+		start_row = ref.start_row;
+		end_row = ref.end_row;
+	}
+};
+
 struct Type_Tracker {
 	DCEL<Pgrd> * system;
 
@@ -39,10 +81,9 @@ struct Type_Tracker {
 		min_hall_width = hall;
 	}
 
-	FLL<Region<Pgrd> *> cleanNulls(FLL<Region<Pgrd> *> &input_nulls);
-	FLL<Region<Pgrd> *> createRoomFromBoundary(FLL<Pgrd> const &boundary);
-	FLL<Region<Pgrd> *> createHallFromBoundary(FLL<Pgrd> const &boundary);
-	FLL<Region<Pgrd> *> createNullFromBoundary(FLL<Pgrd> const &boundary);
+	FLL<Region<Pgrd> *> createRoom(Region_Suggestion const &suggested);
+	FLL<Region<Pgrd> *> createHall(Region_Suggestion const &suggested);
+	FLL<Region<Pgrd> *> createNull(Region_Suggestion const &suggested);
 };
 
 
@@ -56,6 +97,15 @@ class ROOM_BUILDER_API Aroom_description_builder : public AActor
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
 	int32 random_seed;
+
+	UPROPERTY(EditAnyWhere, Category = "gen_config")
+	UMaterial* Wall_Material;
+
+	UPROPERTY(EditAnyWhere, Category = "gen_config")
+	UMaterial* Floor_Material;
+
+	UPROPERTY(EditAnyWhere, Category = "gen_config")
+	UMaterial* Ceiling_Material;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
 	USceneComponent* root;
@@ -85,9 +135,16 @@ class ROOM_BUILDER_API Aroom_description_builder : public AActor
 	double min_hall_width;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-	TArray<FVector2D> A_list;
+	double room_width;
+
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-	TArray<FVector2D> B_list;
+	double room_depth;
+
+	UPROPERTY(EditAnyWhere, Category = "gen_config")
+	double hall_width;
+
+	UPROPERTY(EditAnyWhere, Category = "gen_config")
+	TArray<FBuild_Line> Lines;
 
 	UProceduralMeshComponent* CollisionMesh;
 
@@ -107,7 +164,7 @@ public:
 
 	void Create_System(Type_Tracker & tracker);
 
-	void buldingFromBlock(Type_Tracker &frame, FLL<Pgrd> &A_list, FLL<Pgrd> &B_list);
+	void buldingFromBlock(Type_Tracker &frame, FLL<rigid_line> &list);
 
 	void Main_Generation_Loop();
 
@@ -118,7 +175,4 @@ protected:
 public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
-
-
-
 };
