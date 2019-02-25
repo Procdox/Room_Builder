@@ -1,0 +1,11 @@
+broken seeds:
+40419 - 2 rooms - 0 closets
+    broken triangulation
+
+todo:
+    cull cut types:
+        projected (original)
+        trailing extended
+        leading extended
+    remove next->next cuts
+    

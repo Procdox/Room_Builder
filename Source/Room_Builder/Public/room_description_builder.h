@@ -5,26 +5,87 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "ProceduralMeshComponent.h"
-#include "../ThirdParty/ClipperLib/Includes/ClipperLib.h"
-//#include "../ThirdParty/DCEL/Includes/DCEL.h"
-#include "DCEL.h"
+#include "Grid_Region.h"
 #include "room_description_builder.generated.h"
 
+//Used to track regions within a DCEL and categorize them
+
+struct Region_Suggestion {
+	FLL<Pgrd> centroids;
+	FLL<FLL<Pgrd> *> boundaries;
+
+	bool contains(Pgrd const &test);
+};
+
 USTRUCT()
-struct FRoom_Prototype {
+struct FBuild_Line {
 	GENERATED_BODY()
 
-		UPROPERTY(EditAnyWhere)
-		TArray<FVector2D> Border;
 	UPROPERTY(EditAnyWhere)
-		float Bottom_Height;
+	FVector2D start;
 	UPROPERTY(EditAnyWhere)
-		float Top_Height;
+	FVector2D end;
+
 	UPROPERTY(EditAnyWhere)
-		TArray<FVector2D> Wall_Sections;
+	bool start_row;
 	UPROPERTY(EditAnyWhere)
-		TArray<FVector2D> Door_Sections;
+	bool end_row;
 };
+
+struct rigid_line {
+	Pgrd start;
+	Pgrd end;
+
+	bool start_row;
+	bool end_row;
+
+	rigid_line() {
+
+	}
+	rigid_line(FBuild_Line const &ref) {
+		start = Pgrd(ref.start.X, ref.start.Y);
+		end = Pgrd(ref.end.X, ref.end.Y);
+
+		start_row = ref.start_row;
+		end_row = ref.end_row;
+	}
+};
+
+struct Type_Tracker {
+	DCEL<Pgrd> * system;
+
+	float min_room_width;
+	float min_hall_width;
+
+	FLL<Region<Pgrd> *> Exteriors;
+	FLL<Region<Pgrd> *> Nulls;
+	FLL<Region<Pgrd> *> Rooms;
+	FLL<Region<Pgrd> *> Halls;
+	FLL<Region<Pgrd> *> Smalls;
+
+	bool isRoom(Region<Pgrd> const * target) {
+		for (auto room : Rooms) {
+			if (room == target) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	Type_Tracker(DCEL<Pgrd> * sys, float room, float hall) {
+		system = sys;
+
+		Exteriors.append(sys->region());
+
+		min_room_width = room;
+		min_hall_width = hall;
+	}
+
+	FLL<Region<Pgrd> *> createRoom(Region_Suggestion const &suggested);
+	FLL<Region<Pgrd> *> createHall(Region_Suggestion const &suggested);
+	FLL<Region<Pgrd> *> createNull(Region_Suggestion const &suggested);
+};
+
 
 UCLASS()
 class ROOM_BUILDER_API Aroom_description_builder : public AActor
@@ -32,31 +93,58 @@ class ROOM_BUILDER_API Aroom_description_builder : public AActor
 	GENERATED_BODY()
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-		USceneComponent* root;
+	bool use_static_seed;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-		int32 room_count;
+	int32 random_seed;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-		int32 area_factor;
+	UMaterial* Wall_Material;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-		int32 area_scale;
+	UMaterial* Floor_Material;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-		int32 room_factor;
+	UMaterial* Ceiling_Material;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-		int32 room_scale;
+	USceneComponent* root;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-		float min_ratio;
+	int32 rooms_per_segment;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-		int32 min_area;
+	int32 closets_per_segment;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-		int32 min_width;
+	double wall_thickness;
+
+	UPROPERTY(EditAnyWhere, Category = "gen_config")
+	double room_height;
+
+	UPROPERTY(EditAnyWhere, Category = "gen_config")
+	double door_height;
+
+	UPROPERTY(EditAnyWhere, Category = "gen_config")
+	double door_width;
+
+	UPROPERTY(EditAnyWhere, Category = "gen_config")
+	double min_room_width;
+
+	UPROPERTY(EditAnyWhere, Category = "gen_config")
+	double min_hall_width;
+
+	UPROPERTY(EditAnyWhere, Category = "gen_config")
+	double room_width;
+
+	UPROPERTY(EditAnyWhere, Category = "gen_config")
+	double room_depth;
+
+	UPROPERTY(EditAnyWhere, Category = "gen_config")
+	double hall_width;
+
+	UPROPERTY(EditAnyWhere, Category = "gen_config")
+	TArray<FBuild_Line> Lines;
 
 	UProceduralMeshComponent* CollisionMesh;
 
@@ -64,10 +152,19 @@ public:
 	// Sets default values for this actor's properties
 	Aroom_description_builder();
 
-	void CreateDoor(const FVector2D &a, const FVector2D &b, float Bottom, float Top);
+	UProceduralMeshComponent * CreateMeshComponent();
+	void ActivateMeshComponent(UProceduralMeshComponent * component);
 
-	void Create_Floor_Ceiling_New(const F_DCEL::Face* source, float bottom, float top);
-	void Create_Wall_Sections_New(const F_DCEL::Face* source, float Bottom, float Top, int &h);
+	void CreateWallSegment(Edge<Pgrd> const * target, float bottom, float top, UProceduralMeshComponent * component, int section_id);
+	void CreateDoorSegment(Edge<Pgrd> const * target, float bottom, float top, UProceduralMeshComponent * component, int section_id);
+	void CreateWindowSegment(Edge<Pgrd> const * target, float bottom, float top, UProceduralMeshComponent * component, int section_id);
+
+	void CreateFloorAndCeiling(Region<Pgrd> * source, float bottom, float top);
+	void CreateWallSections(Region<Pgrd> * source, float bottom, float top, Type_Tracker & tracker);
+
+	void Create_System(Type_Tracker & tracker);
+
+	void buldingFromBlock(Type_Tracker &frame, FLL<rigid_line> &list);
 
 	void Main_Generation_Loop();
 
@@ -78,7 +175,4 @@ protected:
 public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
-
-
-
 };
