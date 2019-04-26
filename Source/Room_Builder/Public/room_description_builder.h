@@ -6,6 +6,7 @@
 #include "GameFramework/Actor.h"
 #include "ProceduralMeshComponent.h"
 #include "Grid_Region.h"
+#include "interior_builder.h"
 #include "room_description_builder.generated.h"
 
 //Used to track regions within a DCEL and categorize them
@@ -99,15 +100,6 @@ class ROOM_BUILDER_API Aroom_description_builder : public AActor
 	int32 random_seed;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-	UMaterial* Wall_Material;
-
-	UPROPERTY(EditAnyWhere, Category = "gen_config")
-	UMaterial* Floor_Material;
-
-	UPROPERTY(EditAnyWhere, Category = "gen_config")
-	UMaterial* Ceiling_Material;
-
-	UPROPERTY(EditAnyWhere, Category = "gen_config")
 	USceneComponent* root;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
@@ -117,16 +109,7 @@ class ROOM_BUILDER_API Aroom_description_builder : public AActor
 	int32 closets_per_segment;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
-	double wall_thickness;
-
-	UPROPERTY(EditAnyWhere, Category = "gen_config")
 	double room_height;
-
-	UPROPERTY(EditAnyWhere, Category = "gen_config")
-	double door_height;
-
-	UPROPERTY(EditAnyWhere, Category = "gen_config")
-	double door_width;
 
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
 	double min_room_width;
@@ -146,25 +129,18 @@ class ROOM_BUILDER_API Aroom_description_builder : public AActor
 	UPROPERTY(EditAnyWhere, Category = "gen_config")
 	TArray<FBuild_Line> Lines;
 
-	UProceduralMeshComponent* CollisionMesh;
+	TArray<Ainterior_builder *> interiors;
+
+	UPROPERTY(EditAnyWhere, Category = "gen_config")
+	FRoom_Details details;
 
 public:
 	// Sets default values for this actor's properties
 	Aroom_description_builder();
 
-	UProceduralMeshComponent * CreateMeshComponent();
-	void ActivateMeshComponent(UProceduralMeshComponent * component);
-
-	void CreateWallSegment(Edge<Pgrd> const * target, float bottom, float top, UProceduralMeshComponent * component, int section_id);
-	void CreateDoorSegment(Edge<Pgrd> const * target, float bottom, float top, UProceduralMeshComponent * component, int section_id);
-	void CreateWindowSegment(Edge<Pgrd> const * target, float bottom, float top, UProceduralMeshComponent * component, int section_id);
-
-	void CreateFloorAndCeiling(Region<Pgrd> * source, float bottom, float top);
-	void CreateWallSections(Region<Pgrd> * source, float bottom, float top, Type_Tracker & tracker);
-
 	void Create_System(Type_Tracker & tracker);
 
-	void buldingFromBlock(Type_Tracker &frame, FLL<rigid_line> &list);
+	void buldingFromBlock(DCEL<Pgrd> * system, FLL<rigid_line> &list);
 
 	void Main_Generation_Loop();
 

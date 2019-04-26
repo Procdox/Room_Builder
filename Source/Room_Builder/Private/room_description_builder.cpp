@@ -6,35 +6,11 @@
 #include "DrawDebugHelpers.h"
 #include "ConstructorHelpers.h"
 
-//==========================================================================================================
-//========================================== transforms ====================================================
-//==========================================================================================================
-
-
-
-FVector2D convert(Pgrd const &target) {
-	return FVector2D(target.X.n * 10, target.Y.n * 10);
-}
-
-TArray<FVector2D> convert(FLL<Pgrd> const &target) {
-	TArray<FVector2D> result;
-
-	for (auto x : target)
-		result.Push(convert(x));
-
-	return result;
-}
-
-
-TArray<FVector2D> toFVector(FLL<Pgrd> const &target) {
-	TArray<FVector2D> product;
-
-	for (auto point : target) {
-		product.Push(convert(point));
-	}
-
-	return product;
-}
+#define JC_VORONOI_IMPLEMENTATION
+#define JCV_REAL_TYPE double
+#define JCV_ATAN2 atan2
+#define JCV_FLT_MAX 1.7976931348623157E+308
+#include "jc_voronoi.h"
 
 //==========================================================================================================
 //========================================= utilities ======================================================
@@ -66,14 +42,13 @@ void Draw_Border(const TArray<FVector2D> &border, float height, const UWorld *re
 }
 
 
-Pgrd circularUniformPoint(grd radius = 1, int64 divisions = 100) {
-	float t = 2 * PI*FMath::RandRange(0.f, 1.f);
+Pgrd circularUniformPoint(grd radius = 1) {
+	float t = 2 * PI * FMath::RandRange(0.f, 1.f);
 	float u = FMath::RandRange(0.f, 1.f) + FMath::RandRange(0.f, 1.f);
 	float r = u;
 	if (u > 1)
 		r = 2 - u;
-	r *= divisions;
-	return Pgrd(r*cos(t),r*sin(t)) * radius / divisions;
+	return Pgrd(r*cos(t),r*sin(t)) * radius;
 
 }
 Pgrd boxUniformPoint(grd width = 10, grd height = 10, int64 divisions = 100) {
@@ -111,574 +86,6 @@ PBox getBounds(Region<Pgrd> * target) {
 	return result;
 }
 
-//==========================================================================================================
-//=================================== chord split utilities ================================================
-//==========================================================================================================
-
-
-
-//==========================================================================================================
-//=================================== triangulate utilities ================================================
-//==========================================================================================================
-
-namespace tri_utils
-{
-	bool TryIntersect(const FVector2D &A_S, const FVector2D &A_E, const FVector2D &B_S, const FVector2D &B_E) {
-		double ua, ub, denom;
-		denom = (B_E.Y - B_S.Y)*(A_E.X - A_S.X) - (B_E.X - B_S.X)*(A_E.Y - A_S.Y);
-		if (denom == 0) {
-			return false;
-		}
-		ua = ((B_E.X - B_S.X)*(A_S.Y - B_S.Y) - (B_E.Y - B_S.Y)*(A_S.X - B_S.X)) / denom;
-		ub = ((A_E.X - A_S.X)*(A_S.Y - B_S.Y) - (A_E.Y - A_S.Y)*(A_S.X - B_S.X)) / denom;
-
-		return (ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1);
-	}
-	bool IsConcave(const FVector2D &A, const FVector2D &B, const FVector2D &C) {
-		FVector2D In = B - A;
-		FVector2D Out = C - B;
-		FVector2D OutCCW(-Out.Y, Out.X);
-
-		return (FVector2D::DotProduct(In, OutCCW)<0);
-	}
-
-	template <class T>
-	TArray<T> Reverse(const TArray<T> &Buffer) {
-		const int32 size = Buffer.Num();
-
-		TArray<T> product;
-		product.SetNum(size);
-
-		for (int32 ii = 0; ii < size; ii++) {
-			product[size - ii - 1] = Buffer[ii];
-		}
-
-		return product;
-	}
-
-	TArray<int32> Triangulate(const TArray<FVector2D> &VectorBuffer, TArray<int32> &IndexBuffer) {
-		/*  triangulate via ear clipping  */
-		/*  requires intersect and concavity check  */
-		TArray<int32> Triangles;
-		int32 frozen = 0;
-		{
-			int32 tri_A = 0;
-			int32 tri_B, tri_C, segment_start_index, segment_end_index;
-			bool success = false;
-
-			while (IndexBuffer.Num() > 2) {
-				tri_B = (tri_A + 1) % IndexBuffer.Num();
-				tri_C = (tri_A + 2) % IndexBuffer.Num();
-				segment_start_index = IndexBuffer[tri_A];
-				segment_end_index = IndexBuffer[tri_C];
-				success = true;
-
-				//is an ear?
-				if (!IsConcave(VectorBuffer[segment_start_index], VectorBuffer[IndexBuffer[tri_B]], VectorBuffer[segment_end_index])) {
-					success = false;
-				}
-				else {
-					//preserves planarity?
-					for (int32 index_ex = 0; index_ex < IndexBuffer.Num(); index_ex++) {
-						int32 test_start_index = IndexBuffer[index_ex];
-						int32 test_end_index = IndexBuffer[(index_ex + 1) % (IndexBuffer.Num())];
-
-						if (test_start_index == segment_start_index ||
-							test_end_index == segment_start_index ||
-							test_end_index == segment_end_index ||
-							test_start_index == segment_end_index) {
-							continue;
-						}
-
-						if (TryIntersect(VectorBuffer[segment_start_index], VectorBuffer[segment_end_index],
-							VectorBuffer[test_start_index], VectorBuffer[test_end_index])) {
-
-							success = false;
-							break;
-						}
-
-					}
-				}
-
-				if (success) {
-
-					//remove point
-					Triangles.Add(IndexBuffer[tri_A]);
-					Triangles.Add(IndexBuffer[tri_B]);
-					Triangles.Add(IndexBuffer[tri_C]);
-
-					IndexBuffer.RemoveAt(tri_B);
-
-					tri_A = tri_A - 1;
-					if (tri_A < 0) {
-						tri_A = IndexBuffer.Num() - 1;
-					}
-					frozen = 0;
-				}
-				else {
-					tri_A = (tri_A + 1) % IndexBuffer.Num();
-					frozen++;
-					if (frozen > IndexBuffer.Num()) {
-						UE_LOG(LogTemp, Warning, TEXT("TRIANGULATION FROZEN"));
-						break;
-					}
-				}
-			}
-		}
-		return Triangles;
-	}
-
-}
-
-//==========================================================================================================
-//======================================== creation ========================================================
-//==========================================================================================================
-
-UProceduralMeshComponent * Aroom_description_builder::CreateMeshComponent() {
-	UProceduralMeshComponent* component = NewObject<UProceduralMeshComponent>();
-
-	component->AttachToComponent(root, FAttachmentTransformRules::KeepRelativeTransform);
-	component->ContainsPhysicsTriMeshData(true);
-	component->bUseAsyncCooking = true;
-
-	return component;
-}
-
-void Aroom_description_builder::ActivateMeshComponent(UProceduralMeshComponent * component) {
-	component->ContainsPhysicsTriMeshData(true);
-
-	component->Activate();
-
-	component->RegisterComponentWithWorld(GetWorld());
-}
-
-void generateInsetPoints(Edge<Pgrd> const * target, grd const & distance, 
-	Pgrd & result_A, Pgrd & result_B) {
-
-	Pgrd const previous = target->getLast()->getStart()->getPosition();
-	Pgrd const A = target->getStart()->getPosition();
-	Pgrd const B = target->getEnd()->getPosition();
-	Pgrd const next = target->getNext()->getEnd()->getPosition();
-
-	Pgrd A_last = previous - A;
-	Pgrd A_next = B - A;
-	Pgrd B_last = A - B;
-	Pgrd B_next = next - B;
-
-	A_last.Normalize();
-	A_next.Normalize();
-	B_last.Normalize();
-	B_next.Normalize();
-	
-	{
-		result_A = A_last + A_next;
-
-		if (result_A == Pgrd(0, 0)) {
-			result_A.X = A_next.Y;
-			result_A.Y = -A_next.X;
-
-			result_A *= distance;
-		}
-		else {
-			result_A.Normalize();
-			Pgrd rot(A_next.Y, -A_next.X);
-
-			result_A *= distance / result_A.Dot(rot);
-		}
-
-		result_A += A;
-	}
-
-	{
-		result_B = B_last + B_next;
-
-		if (result_B == Pgrd(0, 0)) {
-			result_B.X = B_next.Y;
-			result_B.Y = -B_next.X;
-
-			result_B *= distance;
-		}
-		else {
-			result_B.Normalize();
-			Pgrd rot(B_next.Y, -B_next.X);
-
-			result_B *= distance / result_B.Dot(rot);
-		}
-
-		result_B += B;
-	}
-
-}
-
-FLL<Pgrd> generateInsetPoints(Face<Pgrd> * target, grd const & distance) {
-
-	FLL<Pgrd> result;
-
-	for (auto edge : target->getLoopEdges()) {
-		Pgrd const previous = edge->getLast()->getStart()->getPosition();
-		Pgrd const A = edge->getStart()->getPosition();
-		Pgrd const B = edge->getEnd()->getPosition();
-
-		Pgrd A_last = previous - A;
-		Pgrd A_next = B - A;
-
-		A_last.Normalize();
-		A_next.Normalize();
-
-		Pgrd inset = A_last + A_next;
-
-		if (inset == Pgrd(0, 0)) {
-			inset.X = A_next.Y;
-			inset.Y = -A_next.X;
-
-			inset *= distance;
-		}
-		else {
-			inset.Normalize();
-			Pgrd rot(A_next.Y, -A_next.X);
-
-			inset *= distance / inset.Dot(rot);
-		}
-
-		inset += A;
-
-		result.append(inset);
-	}
-
-	return result;
-}
-
-void Aroom_description_builder::CreateWallSegment(Edge<Pgrd> const * target, float bottom, float top,
-	UProceduralMeshComponent * component, int section_id) {
-
-	TArray<FVector> Vertices;
-	TArray<int32> Triangles;
-	TArray<FVector> Normals;
-	TArray<FVector2D> UV0;
-	TArray<FProcMeshTangent> Tangents;
-	TArray<FLinearColor> VertexColors;
-
-	Pgrd wall_left, wall_right;
-	generateInsetPoints(target, grd(wall_thickness / 2), wall_left, wall_right);
-
-	Pgrd dir = wall_left - wall_right;
-	dir.Normalize();
-
-	Pgrd normal(dir.Y, -dir.X);
-
-	FVector2D f_wall_left = convert(wall_left);
-	FVector2D f_wall_right = convert(wall_right);
-
-	FVector f_normal(convert(normal), 0);
-
-	Vertices.Push(FVector(f_wall_left, bottom));
-	Vertices.Push(FVector(f_wall_left, top));
-	Vertices.Push(FVector(f_wall_right, bottom));
-	Vertices.Push(FVector(f_wall_right, top));
-
-	Triangles.Push(0);
-	Triangles.Push(1);
-	Triangles.Push(2);
-	Triangles.Push(2);
-	Triangles.Push(1);
-	Triangles.Push(3);
-
-	
-	Normals.Push(f_normal);
-	Normals.Push(f_normal);
-	Normals.Push(f_normal);
-	Normals.Push(f_normal);
-
-	UV0.Push(FVector2D(0, bottom));
-	UV0.Push(FVector2D(0, top));
-	UV0.Push(FVector2D(1, bottom));
-	UV0.Push(FVector2D(1, top));
-
-	Tangents.Push(FProcMeshTangent(0, 0, 1));
-	Tangents.Push(FProcMeshTangent(0, 0, 1));
-	Tangents.Push(FProcMeshTangent(0, 0, 1));
-	Tangents.Push(FProcMeshTangent(0, 0, 1));
-
-	auto color = FLinearColor();
-	color.MakeRandomColor();
-	color.A = 1.0;
-	VertexColors.Push(color);
-	VertexColors.Push(color);
-	VertexColors.Push(color);
-	VertexColors.Push(color);
-
-	component->CreateMeshSection_LinearColor(section_id, Vertices, Triangles, Normals, UV0, VertexColors, Tangents, true);
-}
-
-void Aroom_description_builder::CreateDoorSegment(Edge<Pgrd> const * target, float bottom, float top,
-	UProceduralMeshComponent * component, int section_id) {
-
-	TArray<FVector> Vertices;
-	TArray<int32> Triangles;
-	TArray<FVector> Normals;
-	TArray<FVector2D> UV0;
-	TArray<FProcMeshTangent> Tangents;
-	TArray<FLinearColor> VertexColors;
-
-	Pgrd wall_left, wall_right;
-	generateInsetPoints(target, grd(wall_thickness / 2), wall_left, wall_right);
-
-	Pgrd dir = wall_left - wall_right;
-	dir.Normalize();
-
-	Pgrd normal(dir.Y, -dir.X);
-
-	FVector2D f_wall_left = convert(wall_left);
-	FVector2D f_wall_right = convert(wall_right);
-
-	FVector f_normal(convert(normal), 0);
-
-	FVector2D f_inset_left = convert(target->getStart()->getPosition());
-	FVector2D f_inset_right = convert(target->getEnd()->getPosition());
-
-	if (top - bottom > door_height) {
-		Vertices.Push(FVector(f_wall_left, bottom));
-		Vertices.Push(FVector(f_wall_left, bottom + door_height));
-		
-		Vertices.Push(FVector(f_inset_left, bottom));
-		Vertices.Push(FVector(f_inset_left, bottom + door_height));
-
-		Vertices.Push(FVector(f_wall_right, bottom));
-		Vertices.Push(FVector(f_wall_right, bottom + door_height));
-
-		Vertices.Push(FVector(f_inset_right, bottom));
-		Vertices.Push(FVector(f_inset_right, bottom + door_height));
-
-		Vertices.Push(FVector(f_wall_left, top));
-		Vertices.Push(FVector(f_wall_right, top));
-	}
-	else {
-		Vertices.Push(FVector(convert(wall_left), bottom));
-		Vertices.Push(FVector(convert(wall_left), top));
-
-		Vertices.Push(FVector(f_inset_right, bottom));
-		Vertices.Push(FVector(f_inset_right, top));
-
-		Vertices.Push(FVector(convert(wall_right), bottom));
-		Vertices.Push(FVector(convert(wall_right), top));
-
-		Vertices.Push(FVector(f_inset_right, bottom));
-		Vertices.Push(FVector(f_inset_right, top));
-	}
-
-	//left inset
-	Triangles.Push(0);
-	Triangles.Push(1);
-	Triangles.Push(2);
-	Triangles.Push(2);
-	Triangles.Push(1);
-	Triangles.Push(3);
-
-	//right inset
-	Triangles.Push(7);
-	Triangles.Push(5);
-	Triangles.Push(6);
-	Triangles.Push(6);
-	Triangles.Push(5);
-	Triangles.Push(4);
-
-	//bottom inset
-	Triangles.Push(0);
-	Triangles.Push(2);
-	Triangles.Push(4);
-	Triangles.Push(4);
-	Triangles.Push(2);
-	Triangles.Push(6);
-
-	//top inset
-	Triangles.Push(1);
-	Triangles.Push(5);
-	Triangles.Push(3);
-	Triangles.Push(3);
-	Triangles.Push(5);
-	Triangles.Push(7);
-
-	//top panel
-	if (top - bottom > door_height) {
-		Triangles.Push(1);
-		Triangles.Push(8);
-		Triangles.Push(5);
-		Triangles.Push(5);
-		Triangles.Push(8);
-		Triangles.Push(9);
-	}
-
-	Normals.Push(f_normal);
-	Normals.Push(f_normal);
-	Normals.Push(f_normal);
-	Normals.Push(f_normal);
-	Normals.Push(f_normal);
-	Normals.Push(f_normal);
-	Normals.Push(f_normal);
-	Normals.Push(f_normal);
-	Normals.Push(f_normal);
-	Normals.Push(f_normal);
-
-	UV0.Push(FVector2D(0, bottom));
-	UV0.Push(FVector2D(0, top));
-	UV0.Push(FVector2D(1, bottom));
-	UV0.Push(FVector2D(1, top));
-	UV0.Push(FVector2D(0, bottom));
-	UV0.Push(FVector2D(0, top));
-	UV0.Push(FVector2D(1, bottom));
-	UV0.Push(FVector2D(1, top));
-	UV0.Push(FVector2D(1, bottom));
-	UV0.Push(FVector2D(1, top));
-
-	Tangents.Push(FProcMeshTangent(0, 0, 1));
-	Tangents.Push(FProcMeshTangent(0, 0, 1));
-	Tangents.Push(FProcMeshTangent(0, 0, 1));
-	Tangents.Push(FProcMeshTangent(0, 0, 1));
-	Tangents.Push(FProcMeshTangent(0, 0, 1));
-	Tangents.Push(FProcMeshTangent(0, 0, 1));
-	Tangents.Push(FProcMeshTangent(0, 0, 1));
-	Tangents.Push(FProcMeshTangent(0, 0, 1));
-	Tangents.Push(FProcMeshTangent(0, 0, 1));
-	Tangents.Push(FProcMeshTangent(0, 0, 1));
-
-	auto color = FLinearColor();
-	color.MakeRandomColor();
-	color.A = 1.0;
-	VertexColors.Push(color);
-	VertexColors.Push(color);
-	VertexColors.Push(color);
-	VertexColors.Push(color);
-	VertexColors.Push(color);
-	VertexColors.Push(color);
-	VertexColors.Push(color);
-	VertexColors.Push(color);
-	VertexColors.Push(color);
-	VertexColors.Push(color);
-
-	component->CreateMeshSection_LinearColor(section_id, Vertices, Triangles, Normals, UV0, VertexColors, Tangents, false);
-}
-void Aroom_description_builder::CreateWindowSegment(Edge<Pgrd> const * target, float bottom, float top,
-	UProceduralMeshComponent * component, int section_id) {
-
-}
-
-void Aroom_description_builder::CreateFloorAndCeiling(Region<Pgrd> * source, float bottom, float top) {
-	auto Border = toFVector(generateInsetPoints(source->getBounds().last(), grd(wall_thickness/2)));
-
-	Border = tri_utils::Reverse(Border);
-
-	TArray<int32> Index_Faked;
-	Index_Faked.SetNum(Border.Num());
-	for (int32 ii = 0; ii < Border.Num(); ii++) {
-		Index_Faked[ii] = ii;
-	}
-	TArray<int32> Triangles_top = tri_utils::Triangulate(Border, Index_Faked);
-	TArray<int32> Triangles_bottom = tri_utils::Reverse(Triangles_top);
-
-	UProceduralMeshComponent* Floor_Mesh = NewObject<UProceduralMeshComponent>();
-	Floor_Mesh->AttachToComponent(root, FAttachmentTransformRules::KeepRelativeTransform);
-	Floor_Mesh->ContainsPhysicsTriMeshData(true);
-	Floor_Mesh->bUseAsyncCooking = true;
-
-	TArray<FVector> vertices_bottom;
-	TArray<FVector> vertices_top;
-	TArray<FVector> normals_bottom;
-	TArray<FVector> normals_top;
-	TArray<FVector2D> UV0_bottom;
-	TArray<FVector2D> UV0_top;
-	TArray<FProcMeshTangent> tangents_bottom;
-	TArray<FProcMeshTangent> tangents_top;
-	TArray<FLinearColor> vertexColors_bottom;
-	TArray<FLinearColor> vertexColors_top;
-
-	for (auto& vector : Border) {
-		vertices_bottom.Add(FVector(vector.X, vector.Y, bottom));
-		vertices_top.Add(FVector(vector.X, vector.Y, top));
-		normals_bottom.Add(FVector(0, 0, 1));
-		normals_top.Add(FVector(0, 0, -1));
-		UV0_bottom.Add(vector / 10);
-		UV0_top.Add(vector / 10);
-		tangents_bottom.Add(FProcMeshTangent(0, 1, 0));
-		tangents_top.Add(FProcMeshTangent(0, 1, 0));
-		vertexColors_bottom.Add(FLinearColor(0.75, 0.75, 0.75, 1.0));
-		vertexColors_top.Add(FLinearColor(0.75, 0.75, 0.75, 1.0));
-	}
-
-	Floor_Mesh->CreateMeshSection_LinearColor(0, vertices_bottom, Triangles_bottom, normals_bottom, UV0_bottom, vertexColors_bottom, tangents_bottom, true);
-	Floor_Mesh->CreateMeshSection_LinearColor(1, vertices_top, Triangles_top, normals_top, UV0_top, vertexColors_top, tangents_top, true);
-
-	Floor_Mesh->SetMaterial(0, Floor_Material);
-	Floor_Mesh->SetMaterial(1, Ceiling_Material);
-
-	Floor_Mesh->RegisterComponentWithWorld(GetWorld());
-
-}
-void Aroom_description_builder::CreateWallSections(Region<Pgrd> * source, float bottom, float top, Type_Tracker & tracker) {
-
-	float door_tolerance = door_width + wall_thickness;
-
-	for (auto border : source->getBounds()) {
-		auto border_points = border->getLoopEdges();
-
-		for (auto edge : border_points) {
-
-			Pgrd const A = edge->getStart()->getPosition();
-			Pgrd const B = edge->getEnd()->getPosition();
-
-			auto segment = B - A;
-			grd size = segment.Size();
-
-			Region<Pgrd> * op = edge->getInv()->getFace()->getGroup();
-			auto component = CreateMeshComponent();
-
-			if (edge->mark == 0) {
-				if (size <= door_tolerance || op == nullptr || op->mark == 0) {
-					CreateWallSegment(edge, bottom, top, component, 0);
-					component->SetMaterial(0, Wall_Material);
-					edge->mark = 1;
-					edge->getInv()->mark = 1;
-				}
-				else {
-					auto mid_point = (segment / 2) + A;
-					segment.Normalize();
-					segment *= door_width / 2;
-
-					edge->subdivide(mid_point + segment);
-					edge->subdivide(mid_point - segment);
-					
-					auto middle = edge->getNext();
-					auto opposite = middle->getNext();
-
-					CreateWallSegment(edge, bottom, top, component, 0);
-					CreateDoorSegment(middle, bottom, top, component, 1);
-					CreateWallSegment(opposite, bottom, top, component, 2);
-					component->SetMaterial(0, Wall_Material);
-					component->SetMaterial(1, Wall_Material);
-					component->SetMaterial(2, Wall_Material);
-
-					edge->mark = 1;
-					edge->getInv()->mark = 1;
-
-					middle->mark = 2;
-					middle->getInv()->mark = 2;
-
-					opposite->mark = 1;
-					opposite->getInv()->mark = 1;
-				}
-			}
-			else if (edge->mark == 1) {
-				CreateWallSegment(edge, bottom, top, component, 0);
-				component->SetMaterial(0, Wall_Material);
-			}
-			else {
-				CreateDoorSegment(edge, bottom, top, component, 0);
-				component->SetMaterial(0, Wall_Material);
-			}
-
-			ActivateMeshComponent(component);
-		}
-	}
-}
 
 void Aroom_description_builder::Create_System(Type_Tracker & tracker) {
 
@@ -700,17 +107,19 @@ void Aroom_description_builder::Create_System(Type_Tracker & tracker) {
 	}
 
 	for (auto ext : tracker.Exteriors) {
-		CreateWallSections(ext, 0, room_height, tracker);
+		//CreateWallSections(ext, 0, room_height, tracker);
 	}
 
 	for (auto room : tracker.Rooms) {
-		CreateFloorAndCeiling(room, 0, room_height);
-		CreateWallSections(room, 0, room_height, tracker);
+		Ainterior_builder* novel = (Ainterior_builder*)GetWorld()->SpawnActor(Ainterior_builder::StaticClass());
+		Room_Layout layout(room, 0, room_height);
+		novel->Create(&layout, &details);
 	}
 
 	for (auto hall : tracker.Halls) {
-		CreateFloorAndCeiling(hall, 0, room_height);
-		CreateWallSections(hall, 0, room_height, tracker);
+		Ainterior_builder* novel = (Ainterior_builder*)GetWorld()->SpawnActor(Ainterior_builder::StaticClass());
+		Room_Layout layout(hall, 0, room_height);
+		novel->Create(&layout, &details);
 	}
 }
 
@@ -989,8 +398,201 @@ FLL<Pgrd> * wrapSegment(Pgrd const &A, Pgrd const &B, grd const &extent_perp, gr
 	return result;
 }
 
-void Aroom_description_builder::buldingFromBlock(Type_Tracker &frame, FLL<rigid_line> &list) {
+FLL<Pgrd> poissonSample(grd region_radius, int point_count, grd mid_seperation)
+{
+	//generate points
+	FLL<Pgrd> point_list;
+
+	int safety = 10 * point_count;
+	while (point_list.size() < point_count && --safety > 0)
+	{
+		Pgrd suggestion = circularUniformPoint(region_radius);
+
+		bool safe = true;
+		for (auto point : point_list)
+		{
+			if ((point - suggestion).Size() < 10) {
+				safe = false;
+				break;
+			}
+		}
+		if (safe)
+			point_list.append(suggestion);
+	}
+
+	return point_list;
+}
+
+void Aroom_description_builder::buldingFromBlock(DCEL<Pgrd> * system, FLL<rigid_line> &list) 
+{
+	Region_List Exteriors;
+	Region_List cells;
+	Exteriors.append(system->region());
+
+	const grd region(70);
+	const int max_point_count = 100;
+	const grd span(10);
 	
+	jcv_rect bounding_box = { { -region.n, -region.n }, { region.n, region.n } };
+
+	jcv_point points[max_point_count];
+	jcv_diagram diagram;
+
+	FMemory::Memset<jcv_diagram>(diagram, 0);
+
+	auto point_list = poissonSample(region, max_point_count, span);
+
+	int i = 0;
+	for (auto point : point_list)
+	{
+		points[i].x = point.X.n;
+		points[i].y = point.Y.n;
+		++i;
+	}
+	
+	jcv_diagram_generate(point_list.size(), (const jcv_point *)points, &bounding_box, &diagram);
+
+	point_list.clear();
+
+	const jcv_site* sites = jcv_diagram_get_sites(&diagram);
+
+	for (int i = 0; i < diagram.numsites; ++i) {
+		Region_Suggestion cell_suggestion;
+		FLL<Pgrd> cell_boundary;
+
+		const jcv_site* site = &sites[i];
+
+		const jcv_graphedge* e = site->edges;
+
+		while(e)
+		{
+			cell_boundary.push(Pgrd(e->pos[0].x, e->pos[0].y));
+			e = e->next;
+		}
+
+		Region_List novel_cells;
+		allocateBoundaryFromInto(cell_boundary, Exteriors, novel_cells);
+		cells.absorb(novel_cells);
+		point_list.append(Pgrd(site->p.x, site->p.y));
+	}
+
+	
+	Region_List central;
+	Region_List peripheral;
+
+	auto p = point_list.begin();
+	for (auto cell : cells)
+	{
+		auto size = (*p).Size();
+		UE_LOG(LogTemp, Warning, TEXT("size: %f"), size.n);
+		if (size < 30)
+		{
+			central.append(cell);
+		}
+		else if (size < 50)
+		{
+			peripheral.append(cell);
+		}
+		++p;
+	}
+
+	mergeGroup(peripheral);
+
+	for (auto cell : central)
+	{
+		Ainterior_builder* novel = (Ainterior_builder*)GetWorld()->SpawnActor(Ainterior_builder::StaticClass());
+		Room_Layout layout(cell, 0, room_height);
+		novel->Create(&layout, &details);
+	}
+	for (auto cell : peripheral)
+	{
+		Ainterior_builder* novel = (Ainterior_builder*)GetWorld()->SpawnActor(Ainterior_builder::StaticClass());
+		Room_Layout layout(cell, 0, room_height);
+		novel->Create(&layout, &details);
+	}
+}
+
+//==========================================================================================================
+//====================================== member specific ===================================================
+//==========================================================================================================
+
+void Aroom_description_builder::Main_Generation_Loop() {
+	UE_LOG(LogTemp, Warning, TEXT("Main Generation"));
+	
+	if (use_static_seed)
+		FMath::RandInit(random_seed);
+
+	/*DCEL<Pgrd> system_new;
+	Type_Tracker system_types(&system_new);
+
+	
+
+	UE_LOG(LogTemp, Warning, TEXT("SRand Seed %d\n"), random_seed);
+
+	auto system_bounds = shape_generators::Square_Generator(100, 100, Pgrd(0, 0));
+
+	system_types.Nulls.append(system_new.region(system_bounds));
+
+	create_Layout(system_types, unalligned_count, alligned_count, GetWorld());*/
+
+	DCEL<Pgrd> * system = new DCEL<Pgrd>();
+	//Type_Tracker frame(system, min_room_width, min_hall_width);
+
+	FLL<rigid_line> list;
+	for (auto p : Lines)
+		list.append(rigid_line(p));
+
+	buldingFromBlock(system, list);
+
+	//Create_System(frame);
+
+	delete system;
+}
+
+Aroom_description_builder::Aroom_description_builder()
+{
+	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
+	PrimaryActorTick.bCanEverTick = true;
+
+	root = CreateDefaultSubobject<USceneComponent>(TEXT("GeneratedRoot"));
+
+	RootComponent = root;
+
+	use_static_seed = false;
+	random_seed = 0;
+
+	rooms_per_segment = 10;
+	closets_per_segment = 6;
+
+	room_height = 100;
+	
+
+	min_room_width = 18;
+	min_hall_width = 12;
+
+	room_width = 54;
+	room_depth = 54;
+	hall_width = 12;
+}
+
+// Called when the game starts or when spawned
+void Aroom_description_builder::BeginPlay()
+{
+	Super::BeginPlay();
+
+	//is the orientation of room creation correct?
+
+	Main_Generation_Loop();
+
+}
+
+// Called every frame
+void Aroom_description_builder::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+}
+
+/*
 	UE_LOG(LogTemp, Warning, TEXT("Building Generation\n\n"));
 	Region_Suggestion null_suggestion;
 
@@ -1095,7 +697,7 @@ void Aroom_description_builder::buldingFromBlock(Type_Tracker &frame, FLL<rigid_
 				room_neighbors.append(neighbor);
 
 		Region_List rooms;
-		
+
 
 		smalls.append(small);
 
@@ -1125,95 +727,4 @@ void Aroom_description_builder::buldingFromBlock(Type_Tracker &frame, FLL<rigid_
 
 	frame.Smalls.clear();
 	frame.Smalls.absorb(all_smalls);
-}
-
-//==========================================================================================================
-//====================================== member specific ===================================================
-//==========================================================================================================
-
-void Aroom_description_builder::Main_Generation_Loop() {
-	UE_LOG(LogTemp, Warning, TEXT("Main Generation"));
-	
-	if (use_static_seed)
-		FMath::RandInit(random_seed);
-
-	/*DCEL<Pgrd> system_new;
-	Type_Tracker system_types(&system_new);
-
-	
-
-	UE_LOG(LogTemp, Warning, TEXT("SRand Seed %d\n"), random_seed);
-
-	auto system_bounds = shape_generators::Square_Generator(100, 100, Pgrd(0, 0));
-
-	system_types.Nulls.append(system_new.region(system_bounds));
-
-	create_Layout(system_types, unalligned_count, alligned_count, GetWorld());*/
-
-	DCEL<Pgrd> * system = new DCEL<Pgrd>();
-	Type_Tracker frame(system, min_room_width, min_hall_width);
-
-	FLL<rigid_line> list;
-	for (auto p : Lines)
-		list.append(rigid_line(p));
-
-	buldingFromBlock(frame, list);
-
-	Create_System(frame);
-
-	delete system;
-}
-
-Aroom_description_builder::Aroom_description_builder()
-{
-	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
-	PrimaryActorTick.bCanEverTick = true;
-
-	root = CreateDefaultSubobject<USceneComponent>(TEXT("GeneratedRoot"));
-	CollisionMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("CollisionMesh"));
-	CollisionMesh->AttachToComponent(root, FAttachmentTransformRules::KeepRelativeTransform);
-	CollisionMesh->ContainsPhysicsTriMeshData(true);
-	CollisionMesh->bUseAsyncCooking = true;
-
-	RootComponent = root;
-
-	use_static_seed = false;
-	random_seed = 0;
-
-	rooms_per_segment = 10;
-	closets_per_segment = 6;
-
-	wall_thickness = 10;
-	room_height = 100;
-	door_height = 80;
-
-	min_room_width = 18;
-	min_hall_width = 12;
-
-	room_width = 54;
-	room_depth = 54;
-	hall_width = 12;
-
-	door_width = 3;
-
-	Wall_Material = nullptr;
-	Floor_Material = nullptr;
-	Ceiling_Material = nullptr;
-}
-
-// Called when the game starts or when spawned
-void Aroom_description_builder::BeginPlay()
-{
-	Super::BeginPlay();
-
-	//is the orientation of room creation correct?
-
-	Main_Generation_Loop();
-
-}
-
-// Called every frame
-void Aroom_description_builder::Tick(float DeltaTime)
-{
-	Super::Tick(DeltaTime);
-}
+*/

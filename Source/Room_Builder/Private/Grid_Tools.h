@@ -3,6 +3,17 @@
 
 typedef FLL<Region<Pgrd> *> Region_List;
 
+//==========================================================================================================
+//========================================== transforms ====================================================
+//==========================================================================================================
+FVector2D convert(Pgrd const &target);
+
+TArray<FVector2D> convert(FLL<Pgrd> const &target);
+
+TArray<FVector2D> toFVector(FLL<Pgrd> const &target);
+
+void mergeGroup(Region_List & nulls);
+
 ///<summary>
 ///<para>Trims small sub-regions from target with Cull and merges them to outs</para>
 ///<para>&#160;</para>

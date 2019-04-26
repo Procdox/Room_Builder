@@ -293,13 +293,13 @@ public:
 		return tail->value;
 	}
 
-	FLL<_T> reverse() const {
-		FLL<_T> product;
+	FLL<_T> * reverse() const {
+		FLL<_T> * product = new FLL<_T>();
 
 		FLL_node * focus = head;
 
 		while (focus != nullptr) {
-			product.push(focus->value);
+			product->push(focus->value);
 			focus = focus->next;
 		}
 

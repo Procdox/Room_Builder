@@ -1,6 +1,39 @@
 #include "Grid_Tools.h"
 #include "CoreMinimal.h"
 
+//==========================================================================================================
+//========================================== transforms ====================================================
+//==========================================================================================================
+
+FVector2D convert(Pgrd const &target) {
+	return FVector2D(target.X.n * 10, target.Y.n * 10);
+}
+
+TArray<FVector2D> convert(FLL<Pgrd> const &target) {
+	TArray<FVector2D> result;
+
+	for (auto x : target)
+		result.Push(convert(x));
+
+	return result;
+}
+
+TArray<FVector2D> toFVector(FLL<Pgrd> const &target) {
+	TArray<FVector2D> product;
+
+	for (auto point : target) {
+		product.Push(convert(point));
+	}
+
+	return product;
+}
+
+//==========================================================================================================
+//=================================== chord split utilities ================================================
+//==========================================================================================================
+
+
+
 namespace chord_splits
 {
 
