@@ -16,31 +16,6 @@
 //========================================= utilities ======================================================
 //==========================================================================================================
 
-#define color_Pnk FColor(200,0,200)
-#define color_red FColor(255,0,0)
-#define color_green FColor(0,255,0)
-#define color_blue FColor(0,0,255)
-
-void Draw_Border(const TArray<FVector2D> &border, float height, const UWorld *ref, FColor color = color_Pnk) {
-	float offset = 0;
-	for (int64 index = 0; index < border.Num(); index++) {
-		int64 next = (index + 1) % border.Num();
-
-		DrawDebugLine(
-			ref,
-			FVector(border[index], height + offset * 5),
-			FVector(border[next], height + offset * 5),
-			//FColor(FMath::RandRange(0,255), FMath::RandRange(0, 255), FMath::RandRange(0, 255)),
-			color,
-			true,
-			-1,
-			0,
-			3
-		);
-		//offset++;
-	}
-}
-
 
 Pgrd circularUniformPoint(grd radius = 1) {
 	float t = 2 * PI * FMath::RandRange(0.f, 1.f);

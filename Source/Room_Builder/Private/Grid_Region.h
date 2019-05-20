@@ -50,6 +50,8 @@ FaceRelationType const getPointRelation(FLL<Pgrd> const & rel, Pgrd const &test_
 
 bool merge(Region<Pgrd> * a, Region<Pgrd> * b);
 
+bool angledBetween(Pgrd const &A, Pgrd const &B, Pgrd const &test);
+
 void determineInteriors(Region<Pgrd> *, FLL<interact *> &, FLL<Face<Pgrd> *> &,
 	FLL<Face<Pgrd> *> &);
 

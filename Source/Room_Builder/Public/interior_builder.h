@@ -50,6 +50,8 @@ struct Room_Boundary
 	FLL<Pgrd> Points;
 	FLL<Pgrd> Offsets;
 	FLL<Wall_Type> Segment_Types;
+
+	FLL<Pgrd> Inset(grd const distance) const;
 };
 
 struct Room_Layout
@@ -84,7 +86,7 @@ public:
 	FRoom_Details const * details;
 	Room_Layout const * layout;
 
-	void CreateWallSegment(FLL<Pgrd>::FLL_iterator_c point, FLL<Pgrd>::FLL_iterator_c offset, UProceduralMeshComponent * component, int section_id);
+	void CreateWallSegment(FLL<Pgrd>::FLL_iterator_c point, UProceduralMeshComponent * component, int section_id);
 	//void CreateDoorSegment(FLL<Pgrd>::FLL_iterator_c point, FLL<Pgrd>::FLL_iterator_c offset, UProceduralMeshComponent * component, int section_id);
 	//void CreateWindowSegment(FLL<Pgrd>::FLL_iterator_c point, FLL<Pgrd>::FLL_iterator_c offset, UProceduralMeshComponent * component, int section_id);
 

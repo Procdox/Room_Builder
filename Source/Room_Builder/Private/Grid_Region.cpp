@@ -495,7 +495,7 @@ bool markRegion(Region<Pgrd> * target, FLL<Pgrd> const & boundary, FLL<interact 
 }
 
 //returns if test is between A and B clockwise (right about the origin from A, left about from B)
-bool between(Pgrd const &A, Pgrd const &B, Pgrd const &test) {
+bool angledBetween(Pgrd const &A, Pgrd const &B, Pgrd const &test) {
 
 	Pgrd A_inward(A.Y, -A.X);
 	Pgrd B_inward(-B.Y, B.X);
@@ -578,7 +578,7 @@ void determineInteriors(Region<Pgrd> * target, FLL<interact *> & details,
 						Pgrd created_vector = created->getStart()->getPosition() - into->location;
 						Pgrd orientation = into->mid_location - into->location;
 
-						if (between(next_vector, created_vector, orientation))
+						if (angledBetween(next_vector, created_vector, orientation))
 							into->mark = created;
 
 						if (!interiors.contains(created->getFace()))

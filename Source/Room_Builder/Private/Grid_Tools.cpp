@@ -18,14 +18,13 @@ TArray<FVector2D> convert(FLL<Pgrd> const &target) {
 	return result;
 }
 
-TArray<FVector2D> toFVector(FLL<Pgrd> const &target) {
-	TArray<FVector2D> product;
+TArray<FVector2D> convert(TArray<Pgrd> const &target) {
+	TArray<FVector2D> result;
 
-	for (auto point : target) {
-		product.Push(convert(point));
-	}
+	for (auto x : target)
+		result.Push(convert(x));
 
-	return product;
+	return result;
 }
 
 //==========================================================================================================

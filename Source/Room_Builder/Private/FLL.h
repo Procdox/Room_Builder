@@ -48,6 +48,7 @@ public:
 			relevant = r;
 			focus = v;
 		}
+		
 		FLL_iterator & operator=(FLL_iterator const & target) {
 			relevant = target.relevant;
 			focus = target.focus;
@@ -83,6 +84,53 @@ public:
 			else {
 				return FLL_iterator(relevant, focus->next);
 			}
+		}
+		void remove_next() {
+			if (focus->next == nullptr) {
+				if (relevant->head == focus) {
+
+					relevant->head = nullptr;
+					relevant->tail = nullptr;
+
+					delete focus;
+
+					focus = nullptr;
+				}
+				else
+				{
+					auto gap = relevant->head->next;
+					
+					delete relevant->head;
+
+					relevant->head = gap;
+				}
+			}
+			else if (focus->next == relevant->tail) {
+				delete relevant->tail;
+
+				relevant->tail = focus;
+
+				focus->next = nullptr;
+			}
+			else
+			{
+				auto gap = focus->next->next;
+
+				delete focus->next;
+
+				focus->next = gap;
+			}
+
+			relevant->length--;
+		}
+
+		void insert_after(_T target) {
+			focus->next = new FLL_node(target, focus->next);
+
+			if (relevant->tail == focus)
+				relevant->tail = focus->next;
+
+			relevant->length++;
 		}
 	};
 
@@ -275,10 +323,10 @@ public:
 		return tail;
 	};*/
 
-	FLL_iterator begin() {
+	FLL_iterator begin_unsafe() {
 		return FLL_iterator(this, head);
 	}
-	FLL_iterator end() {
+	FLL_iterator end_unsafe() {
 		return FLL_iterator(this, nullptr);
 	}
 
